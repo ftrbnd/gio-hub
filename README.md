@@ -5,8 +5,8 @@ photo of the printed sheet posted in the store — into events on your iOS Calen
 
 It's two pieces:
 
-1. **`server/`** — a tiny Node/Express endpoint that sends your photo to Claude
-   (vision) and gets back structured shifts as JSON.
+1. **`src/index.ts`** — a tiny Node/Express endpoint that sends your photo to
+   Claude (vision) and gets back structured shifts as JSON.
 2. **An iOS Shortcut** (built by hand in the Shortcuts app — see below) that lets
    you pick the photo, calls the server, and adds each shift to your Calendar.
 
@@ -45,14 +45,17 @@ in order:
 2. **Text** — set to your name as it appears on the schedule (e.g. `"Gio"` or
    however you're listed on the printed sheet). This only matters for the
    printed multi-employee sheet; harmless for ADP's own-shifts view.
-3. **Get Contents of URL**
+3. **Text** — set to your workplace's name (e.g. `"Acme Coffee Co."`) — used
+   in the prompt sent to Claude and in the calendar event title.
+4. **Get Contents of URL**
    - URL: `https://<your-render-url>/parse-schedule`
    - Method: `POST`
    - Headers: `Authorization` → `Bearer <your API_SECRET>`
    - Request Body: **Form**
      - Field `image`, type **File**, value = _Selected Photos_
      - Field `employeeName`, type **Text**, value = the Text from step 2
-4. **Repeat with Each** — Input: _Contents of URL_ (Shortcuts auto-parses the
+     - Field `workplaceName`, type **Text**, value = the Text from step 3
+5. **Repeat with Each** — Input: _Contents of URL_ (Shortcuts auto-parses the
    JSON array into a list of dictionaries; each loop iteration gives you one
    shift as `Repeat Item`).
    Inside the loop:
@@ -66,9 +69,9 @@ in order:
      above), Calendar = the calendar you want these on. This is the dedupe
      check so re-running the shortcut doesn't create duplicate events.
    - **If** _Find Calendar Events_ **Count** _is_ `0`:
-     - **Add New Event** — Title: `Work — Coffee Bean & Tea Leaf`,
+     - **Add New Event** — Title: `Work — [workplace name Text from step 3]`,
        Start Date: `Start Date`, End Date: `End Date`, Calendar: same one as above.
-5. **Show Notification** — "Added this week's shifts to your calendar."
+6. **Show Notification** — "Added this week's shifts to your calendar."
 
 Name the shortcut something like "Add Work Schedule" and add it to your Home
 Screen or the widget for one-tap access.
@@ -86,9 +89,9 @@ photo of the printed sheet. Check:
 ## Local development
 
 ```bash
-cd server
 cp .env.example .env   # then fill in ANTHROPIC_API_KEY and API_SECRET
 npm install
+npm run build
 npm start
 ```
 
@@ -98,5 +101,6 @@ Test the endpoint with a sample image:
 curl -X POST http://localhost:3000/parse-schedule \
   -H "Authorization: Bearer <your API_SECRET>" \
   -F "employeeName=Gio" \
+  -F "workplaceName=Acme Coffee Co." \
   -F "image=@/path/to/schedule.jpg"
 ```

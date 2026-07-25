@@ -3,8 +3,7 @@ services:
     name: work-schedule-server
     runtime: node
     plan: free
-    rootDir: server
-    buildCommand: npm install
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     envVars:
       - key: ANTHROPIC_API_KEY
