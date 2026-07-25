@@ -1,10 +1,11 @@
 {
   "name": "work-schedule-server",
   "version": "1.0.0",
-  "description": "Parses a Coffee Bean & Tea Leaf schedule photo (ADP screenshot or printed sheet) into structured shifts using Claude's vision model, for an iOS Shortcut to add to Calendar.",
-  "main": "src/index.js",
+  "description": "Parses a work schedule photo (ADP screenshot or printed sheet) into structured shifts using Claude's vision model, for an iOS Shortcut to add to Calendar.",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "build": "tsc",
+    "start": "node dist/index.js"
   },
   "engines": {
     "node": ">=18"
@@ -13,5 +14,11 @@
     "@anthropic-ai/sdk": "^0.115.0",
     "express": "^4.21.1",
     "multer": "^2.2.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
   }
 }
