@@ -5,8 +5,8 @@ photo of the printed sheet posted in the store — into events on your iOS Calen
 
 It's two pieces:
 
-1. **`server/`** — a tiny Node/Express endpoint that sends your photo to Claude
-   (vision) and gets back structured shifts as JSON.
+1. **`src/index.js`** — a tiny Node/Express endpoint that sends your photo to
+   Claude (vision) and gets back structured shifts as JSON.
 2. **An iOS Shortcut** (built by hand in the Shortcuts app — see below) that lets
    you pick the photo, calls the server, and adds each shift to your Calendar.
 
@@ -86,7 +86,6 @@ photo of the printed sheet. Check:
 ## Local development
 
 ```bash
-cd server
 cp .env.example .env   # then fill in ANTHROPIC_API_KEY and API_SECRET
 npm install
 npm start
