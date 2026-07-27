@@ -1,6 +1,15 @@
+import crypto from "node:crypto";
 import express, { NextFunction, Request, Response } from "express";
 import multer, { MulterError } from "multer";
 import Anthropic from "@anthropic-ai/sdk";
+
+declare global {
+  namespace Express {
+    interface Request {
+      requestId: string;
+    }
+  }
+}
 
 interface Shift {
   date: string;
@@ -24,6 +33,28 @@ const app = express();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+// Logs every request/response pair, and flags connections the client dropped
+// before a response went out — the key signal for "network connection was
+// lost" style errors reported by the iOS Shortcut.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  req.requestId = crypto.randomUUID().slice(0, 8);
+  const start = Date.now();
+  console.log(
+    `[${req.requestId}] <- ${req.method} ${req.originalUrl} (content-length: ${req.get("content-length") || "unknown"}, content-type: ${req.get("content-type") || "unknown"})`
+  );
+
+  res.on("finish", () => {
+    console.log(`[${req.requestId}] -> ${res.statusCode} in ${Date.now() - start}ms`);
+  });
+  req.on("close", () => {
+    if (!res.writableEnded) {
+      console.warn(`[${req.requestId}] client closed the connection before a response was sent (${Date.now() - start}ms elapsed)`);
+    }
+  });
+
+  next();
 });
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -75,23 +106,29 @@ app.post(
     const auth = req.get("authorization") || "";
     const expected = process.env.API_SECRET;
     if (!expected) {
+      console.error(`[${req.requestId}] server missing API_SECRET configuration`);
       return res.status(500).json({ error: "Server missing API_SECRET configuration" });
     }
     if (auth !== `Bearer ${expected}`) {
+      console.warn(`[${req.requestId}] unauthorized: authorization header ${auth ? "present but did not match" : "missing"}`);
       return res.status(401).json({ error: "Unauthorized" });
     }
 
     if (!req.file) {
+      console.warn(`[${req.requestId}] no 'image' file present in form data`);
       return res.status(400).json({ error: "Missing 'image' file in form data" });
     }
     const mimetype = req.file.mimetype;
+    console.log(`[${req.requestId}] received file: ${req.file.originalname || "(unnamed)"}, ${mimetype}, ${req.file.size} bytes`);
     if (!mimetype || !isAllowedImageType(mimetype)) {
+      console.warn(`[${req.requestId}] rejected file with unsupported mimetype: ${mimetype}`);
       return res.status(400).json({ error: "Uploaded file must be a JPEG, PNG, GIF, or WEBP image" });
     }
 
     const employeeName = (req.body.employeeName || "").trim();
     const workplaceName = (req.body.workplaceName || "").trim();
     const todayISO = new Date().toISOString().slice(0, 10);
+    console.log(`[${req.requestId}] employeeName="${employeeName}", workplaceName="${workplaceName}", todayISO=${todayISO}`);
 
     let message;
     try {
@@ -119,24 +156,27 @@ app.post(
         ],
       });
     } catch (err) {
-      console.error("Claude API call failed:", err);
+      console.error(`[${req.requestId}] Claude API call failed:`, err);
       return res.status(502).json({ error: "Failed to reach the parsing model" });
     }
 
     const textBlock = message.content.find((block) => block.type === "text");
     if (!textBlock) {
+      console.error(`[${req.requestId}] Claude returned no text content block`);
       return res.status(502).json({ error: "Model returned no text content" });
     }
+    console.log(`[${req.requestId}] Claude response text: ${textBlock.text}`);
 
     let shifts: unknown[];
     try {
       shifts = extractJsonArray(textBlock.text);
     } catch (err) {
-      console.error("Failed to parse model output as JSON:", textBlock.text);
+      console.error(`[${req.requestId}] failed to parse model output as JSON:`, textBlock.text);
       return res.status(502).json({ error: "Model response was not valid JSON" });
     }
 
     const validShifts = shifts.filter(isValidShift);
+    console.log(`[${req.requestId}] sending ${validShifts.length} valid shift(s) (${shifts.length} total from model): ${JSON.stringify(validShifts)}`);
     res.json(validShifts);
   }
 );
@@ -144,9 +184,10 @@ app.post(
 // Multer errors (e.g. file too large) land here rather than crashing the process.
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof MulterError) {
+    console.warn(`[${req.requestId}] multer error: ${err.message}`);
     return res.status(400).json({ error: err.message });
   }
-  console.error(err);
+  console.error(`[${req.requestId}] unexpected error:`, err);
   res.status(500).json({ error: "Unexpected server error" });
 });
 
