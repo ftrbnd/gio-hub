@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import express, { NextFunction, Request, Response } from "express";
 import multer, { MulterError } from "multer";
 import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
 
 declare global {
   namespace Express {
@@ -11,23 +12,21 @@ declare global {
   }
 }
 
-interface Shift {
-  date: string;
-  start_time: string;
-  end_time: string;
-}
+const ShiftSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD"),
+  start_time: z.string().regex(/^\d{2}:\d{2}$/, "must be HH:MM"),
+  end_time: z.string().regex(/^\d{2}:\d{2}$/, "must be HH:MM"),
+});
+type Shift = z.infer<typeof ShiftSchema>;
 
-interface ParseScheduleBody {
-  employeeName?: string;
-  workplaceName?: string;
-}
+const JsonArraySchema = z.array(z.unknown());
 
-const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
-type AllowedImageType = (typeof ALLOWED_IMAGE_TYPES)[number];
+const ParseScheduleBodySchema = z.object({
+  employeeName: z.string().trim().catch(""),
+  workplaceName: z.string().trim().catch(""),
+});
 
-function isAllowedImageType(mimetype: string): mimetype is AllowedImageType {
-  return (ALLOWED_IMAGE_TYPES as readonly string[]).includes(mimetype);
-}
+const AllowedImageTypeSchema = z.enum(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 const app = express();
 const upload = multer({
@@ -76,23 +75,11 @@ function extractJsonArray(text: string): unknown[] {
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1].trim() : trimmed;
   const parsed = JSON.parse(candidate);
-  if (!Array.isArray(parsed)) {
-    throw new Error("Model response was not a JSON array");
-  }
-  return parsed;
+  return JsonArraySchema.parse(parsed);
 }
 
 function isValidShift(shift: unknown): shift is Shift {
-  const s = shift as Shift;
-  return (
-    !!s &&
-    typeof s.date === "string" &&
-    /^\d{4}-\d{2}-\d{2}$/.test(s.date) &&
-    typeof s.start_time === "string" &&
-    /^\d{2}:\d{2}$/.test(s.start_time) &&
-    typeof s.end_time === "string" &&
-    /^\d{2}:\d{2}$/.test(s.end_time)
-  );
+  return ShiftSchema.safeParse(shift).success;
 }
 
 app.get("/health", (req: Request, res: Response) => {
@@ -102,7 +89,7 @@ app.get("/health", (req: Request, res: Response) => {
 app.post(
   "/parse-schedule",
   upload.single("image"),
-  async (req: Request<Record<string, never>, unknown, ParseScheduleBody>, res: Response) => {
+  async (req: Request<Record<string, never>, unknown, unknown>, res: Response) => {
     const auth = req.get("authorization") || "";
     const expected = process.env.API_SECRET;
     if (!expected) {
@@ -118,15 +105,15 @@ app.post(
       console.warn(`[${req.requestId}] no 'image' file present in form data`);
       return res.status(400).json({ error: "Missing 'image' file in form data" });
     }
-    const mimetype = req.file.mimetype;
-    console.log(`[${req.requestId}] received file: ${req.file.originalname || "(unnamed)"}, ${mimetype}, ${req.file.size} bytes`);
-    if (!mimetype || !isAllowedImageType(mimetype)) {
-      console.warn(`[${req.requestId}] rejected file with unsupported mimetype: ${mimetype}`);
+    console.log(`[${req.requestId}] received file: ${req.file.originalname || "(unnamed)"}, ${req.file.mimetype}, ${req.file.size} bytes`);
+    const mimetypeResult = AllowedImageTypeSchema.safeParse(req.file.mimetype);
+    if (!mimetypeResult.success) {
+      console.warn(`[${req.requestId}] rejected file with unsupported mimetype: ${req.file.mimetype}`);
       return res.status(400).json({ error: "Uploaded file must be a JPEG, PNG, GIF, or WEBP image" });
     }
+    const mimetype = mimetypeResult.data;
 
-    const employeeName = (req.body.employeeName || "").trim();
-    const workplaceName = (req.body.workplaceName || "").trim();
+    const { employeeName, workplaceName } = ParseScheduleBodySchema.parse(req.body);
     const todayISO = new Date().toISOString().slice(0, 10);
     console.log(`[${req.requestId}] employeeName="${employeeName}", workplaceName="${workplaceName}", todayISO=${todayISO}`);
 
