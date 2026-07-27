@@ -4,7 +4,7 @@
   "description": "Parses a work schedule photo (ADP screenshot or printed sheet) into structured shifts using Claude's vision model, for an iOS Shortcut to add to Calendar.",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "start": "node dist/index.js"
   },
   "engines": {
@@ -20,6 +20,7 @@
     "@types/express": "^5.0.6",
     "@types/multer": "^2.2.0",
     "@types/node": "^26.1.1",
+    "tsc-alias": "^1.9.1",
     "typescript": "^7.0.2"
   }
 }
