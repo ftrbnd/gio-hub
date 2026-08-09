@@ -10,7 +10,7 @@ import {
 } from '@/models/spotify.model';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
-const SCOPES = 'user-top-read playlist-modify-private';
+const SCOPES = 'user-top-read playlist-modify-public';
 const OAUTH_STATE_TTL_SECONDS = 600;
 const TOP_TRACKS_LIMIT = 3;
 
@@ -144,12 +144,18 @@ export function currentMonthKey(date = new Date()): string {
 	return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
+// "MMM(M) 'YY" — the first 3 letters of the month, capitalized, except
+// 4-letter months (June, July) spell out in full since abbreviating them
+// saves nothing. E.g. "Jan '26", "May '26", "June '26", "Sep '26".
 export function monthDisplayName(monthKey: string): string {
 	const [year, month] = monthKey.split('-').map(Number);
-	const label = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(
+	const fullMonthName = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(
 		new Date(year, month - 1, 1),
 	);
-	return `Top Tracks — ${label} ${year}`;
+	const abbreviation =
+		fullMonthName.length <= 4 ? fullMonthName : fullMonthName.slice(0, 3);
+	const shortYear = String(year).slice(-2);
+	return `${abbreviation} '${shortYear}`;
 }
 
 export async function getOrCreateMonthlyPlaylist(
@@ -165,8 +171,7 @@ export async function getOrCreateMonthlyPlaylist(
 		method: 'POST',
 		body: JSON.stringify({
 			name: monthDisplayName(monthKey),
-			public: false,
-			description: 'Weekly top-3 tracks, added automatically.',
+			public: true,
 		}),
 	});
 	const playlistId = SpotifyCreatePlaylistResponseSchema.parse(json).id;
