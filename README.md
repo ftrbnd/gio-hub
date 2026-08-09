@@ -164,14 +164,17 @@ third-party cron dashboard can't be used against `/parse-schedule`),
    tab." This is a one-time step — the refresh token it stores in Upstash is
    reused for every future sync.
 
-5. **Set up the weekly job** — create a free account at
-   [cron-job.org](https://cron-job.org) (or any similar service) and add a job:
-   - URL: `https://<your-render-url>/spotify/sync`
+5. **Set up the weekly job with [QStash](https://console.upstash.com/qstash)**
+   (Upstash's scheduler — same account as the Redis database above). Under
+   **Schedules** → **Create Schedule**:
+   - Destination URL: `https://<your-render-url>/spotify/sync`
+   - Cron expression: e.g. `0 15 * * 1` (every Monday at 15:00 UTC)
    - Method: `POST`
-   - Header: `Authorization` → `Bearer <your CRON_SECRET>`
-   - Schedule: weekly
-   - Give it a generous timeout (60s+) — Render's free tier can take
-     30-60s to wake up from a cold start.
+   - Headers: `Authorization` → `Bearer <your CRON_SECRET>`
+   - Retries: QStash retries failed deliveries automatically, which also
+     covers Render's free-tier cold start (a sleeping instance's first
+     response can take 30-60s) — no manual timeout tuning needed like a
+     plain cron pinger would require.
 
 ### Testing
 
