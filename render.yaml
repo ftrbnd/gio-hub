@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: work-schedule-server
+    name: gio-hub
     runtime: node
     plan: free
     buildCommand: npm install --include=dev && npm run build
@@ -9,4 +9,16 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: API_SECRET
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: SPOTIFY_REDIRECT_URI
+        sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
         sync: false

@@ -1,7 +1,7 @@
 {
-  "name": "work-schedule-server",
+  "name": "gio-hub-server",
   "version": "1.0.0",
-  "description": "Parses a work schedule photo (ADP screenshot or printed sheet) into structured shifts using Claude's vision model, for an iOS Shortcut to add to Calendar.",
+  "description": "A personal-app server: parses work schedule photos (ADP screenshot or printed sheet) into calendar shifts using Claude's vision model, and keeps a monthly Spotify playlist stocked with your weekly top tracks.",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && tsc-alias",
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
+    "@upstash/redis": "^1.38.2",
     "express": "^4.21.1",
     "multer": "^2.2.0",
     "zod": "^4.4.3"

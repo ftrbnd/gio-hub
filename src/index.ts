@@ -4,5 +4,5 @@ const app = createApp();
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-	console.log(`work-schedule server listening on port ${port}`);
+	console.log(`gio-hub server listening on port ${port}`);
 });
