@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gio-hub-server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--env-file=.env", "dist/index.js"],
+      "port": 3000
+    }
+  ]
+}

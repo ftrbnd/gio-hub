@@ -1,20 +1,8 @@
 import { Request, Response } from 'express';
 import * as spotifyService from '@/services/spotify.service';
+import * as ticktickService from '@/services/ticktick.service';
 
 export async function loginRedirect(req: Request, res: Response) {
-	const secret = typeof req.query.secret === 'string' ? req.query.secret : '';
-	const expected = process.env.API_SECRET;
-	if (!expected) {
-		console.error(`[${req.requestId}] server missing API_SECRET configuration`);
-		return res
-			.status(500)
-			.json({ error: 'Server missing API_SECRET configuration' });
-	}
-	if (secret !== expected) {
-		console.warn(`[${req.requestId}] rejected /spotify/login: missing or incorrect secret`);
-		return res.status(401).json({ error: 'Unauthorized' });
-	}
-
 	try {
 		const state = await spotifyService.createAndStoreOAuthState();
 		const url = spotifyService.buildAuthorizeUrl(state);
@@ -67,7 +55,16 @@ export async function sync(req: Request, res: Response) {
 	try {
 		const result = await spotifyService.runWeeklySync();
 		console.log(`[${req.requestId}] Spotify sync complete: ${JSON.stringify(result)}`);
-		res.json(result);
+
+		let ticktickTaskCreated = false;
+		try {
+			await ticktickService.createCheckPlaylistTask(spotifyService.playlistUrl(result.playlistId));
+			ticktickTaskCreated = true;
+		} catch (err) {
+			console.error(`[${req.requestId}] failed to create TickTick task:`, err);
+		}
+
+		res.json({ ...result, ticktickTaskCreated });
 	} catch (err) {
 		if (err instanceof spotifyService.SpotifyNotConnectedError) {
 			console.warn(`[${req.requestId}] Spotify sync skipped: not connected`);

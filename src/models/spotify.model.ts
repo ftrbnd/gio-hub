@@ -20,10 +20,6 @@ export const SpotifyTokenResponseSchema = z.object({
 	scope: z.string().optional(),
 });
 
-export const SpotifyUserSchema = z.object({
-	id: z.string(),
-});
-
 export const SpotifyCreatePlaylistResponseSchema = z.object({
 	id: z.string(),
 });

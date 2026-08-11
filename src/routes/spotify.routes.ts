@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { callback, loginRedirect, sync } from '@/controllers/spotify.controller';
-import { authenticateCron } from '@/middleware/auth';
+import { authenticateCron, authenticateQuerySecret } from '@/middleware/auth';
 
 const router = Router();
 
-router.get('/spotify/login', loginRedirect);
+router.get('/spotify/login', authenticateQuerySecret, loginRedirect);
 router.get('/spotify/callback', callback);
 router.post('/spotify/sync', authenticateCron, sync);
 

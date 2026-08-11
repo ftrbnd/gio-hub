@@ -7,8 +7,11 @@ tools that don't need a UI of their own:
    your iOS Calendar.
 2. **Spotify Weekly Top Tracks** — keeps a playlist stocked with your top 3
    tracks each week, one playlist per month.
+3. **TickTick Playlist Reminder** — every time the weekly Spotify sync
+   finishes, drops a "Check monthly playlist" task (linking to that month's
+   playlist) into TickTick.
 
-Both modules share one Express app, one deploy, and one set of conventions:
+All three modules share one Express app, one deploy, and one set of conventions:
 routes → controllers → services → models, each request authenticated with a
 bearer secret.
 
@@ -187,3 +190,64 @@ Expect a JSON response listing the tracks added and any already present this
 month. Check your Spotify app for the new/updated monthly playlist. Run the
 same command again immediately — it should report the same tracks as
 "already present" rather than adding duplicates.
+
+If TickTick (see Module 3 below) is connected, the response also includes
+`ticktickTaskCreated: true` and a new task should show up in your TickTick
+list.
+
+---
+
+## Module 3: TickTick Playlist Reminder
+
+Every time `/spotify/sync` completes successfully, it also creates a TickTick
+task titled "Check monthly playlist" with that month's playlist URL in the
+task notes — a nudge to go curate the auto-added tracks. If TickTick isn't
+connected yet, or the TickTick API call fails, the Spotify sync itself still
+succeeds (the failure is just logged).
+
+**Env vars:** `API_SECRET` (same as above — also gates the one-time
+`/ticktick/login` and `/ticktick/projects` steps), `TICKTICK_CLIENT_ID`,
+`TICKTICK_CLIENT_SECRET`, `TICKTICK_REDIRECT_URI`, `TICKTICK_PROJECT_ID`.
+
+### One-time setup
+
+1. **Create a TickTick app** at https://developer.ticktick.com/manage →
+   **Create App**. Add both of these as the **OAuth Redirect URL** (you'll
+   use one or the other depending on environment):
+   - `http://localhost:3000/ticktick/callback` (local dev)
+   - `https://<your-render-url>/ticktick/callback` (production)
+
+   Copy the **Client ID** and **Client Secret** into `TICKTICK_CLIENT_ID` /
+   `TICKTICK_CLIENT_SECRET`. Set `TICKTICK_REDIRECT_URI` to whichever of the
+   two URIs matches where you're running the server.
+
+2. **Set the env vars above** (locally in `.env`, and/or in the Render
+   dashboard for production) — except `TICKTICK_PROJECT_ID`, which you don't
+   have yet.
+
+3. **Connect your TickTick account** — with the server running, open this URL
+   in a browser and approve the consent screen:
+   ```
+   http://localhost:3000/ticktick/login?secret=<your API_SECRET>
+   ```
+   (or the `https://<your-render-url>/...` equivalent in production). You
+   should land on a page that says "TickTick connected — you can close this
+   tab." This is a one-time step — the access token it stores in Upstash is
+   reused for every future task creation. TickTick's Open API doesn't issue
+   refresh tokens, so if the token eventually expires, just repeat this step.
+
+4. **Find the list (project) you want the task added to** — hit:
+   ```
+   http://localhost:3000/ticktick/projects?secret=<your API_SECRET>
+   ```
+   and copy the `id` of the list you want from the JSON array. Set that as
+   `TICKTICK_PROJECT_ID`.
+
+### Testing
+
+```bash
+curl http://localhost:3000/ticktick/projects?secret=<your API_SECRET>
+```
+
+Expect a JSON array of your TickTick lists. Then run the Module 2 sync test
+above and check TickTick for the new "Check monthly playlist" task.

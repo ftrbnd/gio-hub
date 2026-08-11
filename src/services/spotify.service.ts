@@ -1,24 +1,20 @@
-import crypto from 'node:crypto';
 import { redis } from '@/config/redis';
+import { requireEnv } from '@/lib/env';
 import {
 	SpotifyCreatePlaylistResponseSchema,
 	SpotifyTokenResponseSchema,
 	SpotifyTopTracksResponseSchema,
 	SpotifyTrack,
-	SpotifyUserSchema,
 	SyncResult,
 } from '@/models/spotify.model';
+import {
+	createAndStoreOAuthState as createOAuthState,
+	verifyAndConsumeOAuthState as verifyOAuthState,
+} from '@/services/oauthState.service';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 const SCOPES = 'user-top-read playlist-modify-public';
-const OAUTH_STATE_TTL_SECONDS = 600;
 const TOP_TRACKS_LIMIT = 3;
-
-function requireEnv(name: string): string {
-	const value = process.env[name];
-	if (!value) throw new Error(`Missing required environment variable: ${name}`);
-	return value;
-}
 
 export class SpotifyNotConnectedError extends Error {
 	constructor() {
@@ -37,20 +33,12 @@ export function buildAuthorizeUrl(state: string): string {
 	return `https://accounts.spotify.com/authorize?${params.toString()}`;
 }
 
-export async function createAndStoreOAuthState(): Promise<string> {
-	const state = crypto.randomUUID();
-	await redis.set(`spotify:oauth:state:${state}`, '1', {
-		ex: OAUTH_STATE_TTL_SECONDS,
-	});
-	return state;
+export function createAndStoreOAuthState(): Promise<string> {
+	return createOAuthState('spotify');
 }
 
-export async function verifyAndConsumeOAuthState(state: string): Promise<boolean> {
-	const key = `spotify:oauth:state:${state}`;
-	const exists = await redis.get(key);
-	if (!exists) return false;
-	await redis.del(key);
-	return true;
+export function verifyAndConsumeOAuthState(state: string): Promise<boolean> {
+	return verifyOAuthState('spotify', state);
 }
 
 async function requestToken(
@@ -124,11 +112,6 @@ async function spotifyFetch<T>(
 	return res.json() as Promise<T>;
 }
 
-export async function getCurrentUserId(accessToken: string): Promise<string> {
-	const json = await spotifyFetch<unknown>(accessToken, '/me');
-	return SpotifyUserSchema.parse(json).id;
-}
-
 export async function getTopTracks(
 	accessToken: string,
 	limit = TOP_TRACKS_LIMIT,
@@ -161,13 +144,12 @@ export function monthDisplayName(monthKey: string): string {
 export async function getOrCreateMonthlyPlaylist(
 	monthKey: string,
 	accessToken: string,
-	userId: string,
 ): Promise<string> {
 	const key = `spotify:playlist:${monthKey}`;
 	const existing = await redis.get<string>(key);
 	if (existing) return existing;
 
-	const json = await spotifyFetch<unknown>(accessToken, `/users/${userId}/playlists`, {
+	const json = await spotifyFetch<unknown>(accessToken, '/me/playlists', {
 		method: 'POST',
 		body: JSON.stringify({
 			name: monthDisplayName(monthKey),
@@ -196,10 +178,14 @@ export async function addTracksToPlaylist(
 	uris: string[],
 ): Promise<void> {
 	if (uris.length === 0) return;
-	await spotifyFetch(accessToken, `/playlists/${playlistId}/tracks`, {
+	await spotifyFetch(accessToken, `/playlists/${playlistId}/items`, {
 		method: 'POST',
 		body: JSON.stringify({ uris }),
 	});
+}
+
+export function playlistUrl(playlistId: string): string {
+	return `https://open.spotify.com/playlist/${playlistId}`;
 }
 
 function trackLabel(track: SpotifyTrack): string {
@@ -214,13 +200,10 @@ export async function runWeeklySync(): Promise<SyncResult> {
 		await refreshAccessToken(storedRefreshToken);
 	if (rotatedRefreshToken) await storeRefreshToken(rotatedRefreshToken);
 
-	const [userId, topTracks] = await Promise.all([
-		getCurrentUserId(accessToken),
-		getTopTracks(accessToken),
-	]);
+	const topTracks = await getTopTracks(accessToken);
 
 	const monthKey = currentMonthKey();
-	const playlistId = await getOrCreateMonthlyPlaylist(monthKey, accessToken, userId);
+	const playlistId = await getOrCreateMonthlyPlaylist(monthKey, accessToken);
 	const alreadyAdded = await getAddedTrackUris(monthKey);
 
 	const newTracks = topTracks.filter((track) => !alreadyAdded.has(track.uri));
