@@ -1,27 +1,32 @@
 {
-  "name": "gio-hub-server",
-  "version": "1.0.0",
-  "description": "A personal-app server: parses work schedule photos (ADP screenshot or printed sheet) into calendar shifts using Claude's vision model, and keeps a monthly Spotify playlist stocked with your weekly top tracks.",
-  "main": "dist/index.js",
-  "scripts": {
-    "build": "tsc && tsc-alias",
-    "start": "node dist/index.js"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
-    "@upstash/redis": "^1.38.2",
-    "express": "^4.21.1",
-    "multer": "^2.2.0",
-    "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@types/express": "^5.0.6",
-    "@types/multer": "^2.2.0",
-    "@types/node": "^26.1.1",
-    "tsc-alias": "^1.9.1",
-    "typescript": "^7.0.2"
-  }
+	"name": "gio-hub-server",
+	"version": "1.0.0",
+	"description": "A personal-app server: parses work schedule photos (ADP screenshot or printed sheet) into calendar shifts using Claude's vision model, and keeps a monthly Spotify playlist stocked with your weekly top tracks.",
+	"main": "dist/index.js",
+	"scripts": {
+		"build": "tsc && tsc-alias",
+		"start": "node dist/index.js",
+		"dev": "tsx watch src/index.ts"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"dependencies": {
+		"@anthropic-ai/sdk": "^0.115.0",
+		"@upstash/redis": "^1.38.2",
+		"discord-interactions": "^4.4.0",
+		"discord.js": "^14.27.0",
+		"dotenv": "^17.4.2",
+		"express": "^4.21.1",
+		"multer": "^2.2.0",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/express": "^5.0.6",
+		"@types/multer": "^2.2.0",
+		"@types/node": "^26.1.1",
+		"tsc-alias": "^1.9.1",
+		"tsx": "^4.23.12",
+		"typescript": "^7.0.2"
+	}
 }

@@ -10,8 +10,13 @@ tools that don't need a UI of their own:
 3. **TickTick Playlist Reminder** — every time the weekly Spotify sync
    finishes, drops a "Check monthly playlist" task (linking to that month's
    playlist) into TickTick.
+4. **Discord DM** — sends messages to your personal Discord account via a bot
+   you control. Every weekly Spotify sync (Module 2) DMs you a summary of
+   that week's top tracks. Also ships with a standalone test endpoint; other
+   modules can call `discordService.sendDirectMessage()` to notify you of
+   anything else.
 
-All three modules share one Express app, one deploy, and one set of conventions:
+All four modules share one Express app, one deploy, and one set of conventions:
 routes → controllers → services → models, each request authenticated with a
 bearer secret.
 
@@ -43,6 +48,12 @@ request after a while takes ~30-60s to wake up, then responds normally.
 ```bash
 cp .env.example .env   # fill in the vars for whichever module(s) you're using
 npm install
+npm run dev             # watches src/ and restarts on change
+```
+
+Or, to run it the same way it runs in production (compiled, no watch):
+
+```bash
 npm run build
 npm start
 ```
@@ -126,7 +137,8 @@ curl -X POST http://localhost:3000/parse-schedule \
 Every week, pulls your Spotify top 3 tracks (short-term listening window) and
 adds any not already there to a playlist for the current month (e.g.
 "Top Tracks — August 2026"). A new playlist is created automatically at the
-start of each month.
+start of each month. If Discord (see Module 4 below) is connected, a summary
+of that week's top tracks is also DMed to you.
 
 **Env vars:** `API_SECRET` (same as above — also gates the one-time
 `/spotify/login` step), `CRON_SECRET` (a *separate* secret, generated the same
@@ -193,7 +205,13 @@ same command again immediately — it should report the same tracks as
 
 If TickTick (see Module 3 below) is connected, the response also includes
 `ticktickTaskCreated: true` and a new task should show up in your TickTick
-list.
+list. If Discord (see Module 4 below) is connected, the response also
+includes `discordMessageSent: true` and you should get a DM listing that
+week's top tracks with a link to the playlist.
+
+Either notification failing (not connected, API error) doesn't fail the sync
+itself — it's logged and reflected as `false` in the response, same as
+TickTick.
 
 ---
 
@@ -251,3 +269,75 @@ curl http://localhost:3000/ticktick/projects?secret=<your API_SECRET>
 
 Expect a JSON array of your TickTick lists. Then run the Module 2 sync test
 above and check TickTick for the new "Check monthly playlist" task.
+
+---
+
+## Module 4: Discord DM
+
+Uses [discord.js](https://discord.js.org) (REST only — no persistent gateway
+connection, so it fits this request/response server and Render's free-tier
+spin-down) to send direct messages to your own Discord account through a bot
+you create and control.
+
+The weekly summary embed (Module 2) ships with a button — "TickTick Reminder:
+On/Off" — that toggles whether `/spotify/sync` also creates the TickTick
+"Check monthly playlist" task. Clicking it flips the stored preference and
+updates the button in place; no page, no extra message. Button clicks arrive
+as a webhook from Discord to `POST /discord/interactions`, verified using its
+Ed25519 request signature (via
+[discord-interactions](https://github.com/discord/discord-interactions-js))
+rather than `API_SECRET` — Discord itself is the caller here, not your
+Shortcut or cron job.
+
+**Env vars:** `API_SECRET` (same as above — also gates the test endpoint),
+`DISCORD_BOT_TOKEN`, `DISCORD_USER_ID`, `DISCORD_PUBLIC_KEY` (only needed once
+you complete step 5 below).
+
+### One-time setup
+
+1. **Create a Discord application + bot** at
+   https://discord.com/developers/applications → **New Application**. Under
+   **Bot**, click **Reset Token** to reveal it and copy it into
+   `DISCORD_BOT_TOKEN`. (Under **Privileged Gateway Intents** you don't need
+   to enable anything — this integration never connects to the gateway.)
+   On the **General Information** page, copy **Public Key** into
+   `DISCORD_PUBLIC_KEY`.
+
+2. **Invite the bot to a server you're in** — under **OAuth2 → URL
+   Generator**, check the `bot` scope (no permissions needed), copy the
+   generated URL, open it, and add the bot to any server you're a member of
+   (a private server you create just for this works fine). Discord only lets
+   a bot open a DM with you if you share a server with it.
+
+3. **Find your Discord user ID** — in Discord, enable **Settings → Advanced →
+   Developer Mode**, then right-click your own name/avatar and choose
+   **Copy User ID**. Set that as `DISCORD_USER_ID`.
+
+4. **Set the env vars above** (locally in `.env`, and/or in the Render
+   dashboard for production).
+
+5. **Set the Interactions Endpoint URL** (only needed to make the TickTick
+   reminder button clickable — skip this if you just want one-way DMs) — on
+   the application's **General Information** page, set it to
+   `https://<your-render-url>/discord/interactions` and save. Discord sends a
+   verification `PING` to this URL the moment you save, so your Render
+   service needs to be awake and `DISCORD_PUBLIC_KEY` already set — hit
+   `/health` first if it's been asleep. This only works against a public URL;
+   it can't be verified against `localhost`.
+
+### Testing
+
+```bash
+curl -X POST http://localhost:3000/discord/test \
+  -H "Authorization: Bearer <your API_SECRET>"
+```
+
+Expect `{"sent":true}` and a DM from your bot in Discord.
+
+To test the button, run the Module 2 sync test and click the "TickTick
+Reminder" button on the resulting embed (requires step 5 above, and a public
+URL — button clicks won't reach `localhost`). The button's label should flip
+between "On" and "Off", and subsequent syncs should respect it: `off` means
+`/spotify/sync` still updates the playlist and sends the Discord summary, but
+skips creating the TickTick task (`ticktickTaskCreated: false` in the
+response).
