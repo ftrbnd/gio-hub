@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
+import * as discordService from '@/services/discord.service';
 
 function createBearerAuth(envVarName: string) {
 	return function authenticateBearer(req: Request, res: Response, next: NextFunction) {
@@ -6,6 +7,7 @@ function createBearerAuth(envVarName: string) {
 		const expected = process.env[envVarName];
 		if (!expected) {
 			console.error(`[${req.requestId}] server missing ${envVarName} configuration`);
+			discordService.notifyErrorDM(req.requestId, `server missing ${envVarName} configuration`);
 			return res
 				.status(500)
 				.json({ error: `Server missing ${envVarName} configuration` });
@@ -29,6 +31,7 @@ function createQuerySecretAuth(envVarName: string) {
 		const expected = process.env[envVarName];
 		if (!expected) {
 			console.error(`[${req.requestId}] server missing ${envVarName} configuration`);
+			discordService.notifyErrorDM(req.requestId, `server missing ${envVarName} configuration`);
 			return res
 				.status(500)
 				.json({ error: `Server missing ${envVarName} configuration` });

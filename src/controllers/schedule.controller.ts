@@ -3,6 +3,7 @@ import {
 	AllowedImageTypeSchema,
 	ParseScheduleBodySchema,
 } from '@/models/shift.model';
+import * as discordService from '@/services/discord.service';
 import * as scheduleService from '@/services/schedule.service';
 
 export async function parseSchedule(
@@ -50,12 +51,14 @@ export async function parseSchedule(
 		);
 	} catch (err) {
 		console.error(`[${req.requestId}] Claude API call failed:`, err);
+		discordService.notifyErrorDM(req.requestId, 'Claude API call failed', err);
 		return res.status(502).json({ error: 'Failed to reach the parsing model' });
 	}
 
 	const textBlock = message.content.find((block) => block.type === 'text');
 	if (!textBlock) {
 		console.error(`[${req.requestId}] Claude returned no text content block`);
+		discordService.notifyErrorDM(req.requestId, 'Claude returned no text content block');
 		return res.status(502).json({ error: 'Model returned no text content' });
 	}
 	console.log(`[${req.requestId}] Claude response text: ${textBlock.text}`);
@@ -68,6 +71,7 @@ export async function parseSchedule(
 			`[${req.requestId}] failed to parse model output as JSON:`,
 			textBlock.text,
 		);
+		discordService.notifyErrorDM(req.requestId, 'failed to parse model output as JSON', err);
 		return res.status(502).json({ error: 'Model response was not valid JSON' });
 	}
 

@@ -279,6 +279,13 @@ connection, so it fits this request/response server and Render's free-tier
 spin-down) to send direct messages to your own Discord account through a bot
 you create and control.
 
+The server also DMs you a red error embed (message + stack trace) whenever
+something goes wrong: any request that reaches the global Express error
+handler unrecognized, plus any uncaught exception or unhandled promise
+rejection anywhere in the process. Process-level crashes still exit
+(`process.exit(1)`) after the DM goes out — same as before, just with a
+heads-up first — so Render's restart-on-crash behavior is unaffected.
+
 The weekly summary embed (Module 2) ships with a button — "TickTick Reminder:
 On/Off" — that toggles whether `/spotify/sync` also creates the TickTick
 "Check monthly playlist" task. Clicking it flips the stored preference and

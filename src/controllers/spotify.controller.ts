@@ -10,6 +10,7 @@ export async function loginRedirect(req: Request, res: Response) {
 		res.redirect(url);
 	} catch (err) {
 		console.error(`[${req.requestId}] failed to start Spotify OAuth flow:`, err);
+		discordService.notifyErrorDM(req.requestId, 'failed to start Spotify OAuth flow', err);
 		res.status(500).json({ error: 'Failed to start Spotify OAuth flow' });
 	}
 }
@@ -46,6 +47,7 @@ export async function callback(req: Request, res: Response) {
 		res.send('Spotify connected — you can close this tab.');
 	} catch (err) {
 		console.error(`[${req.requestId}] Spotify OAuth callback failed:`, err);
+		discordService.notifyErrorDM(req.requestId, 'Spotify OAuth callback failed', err);
 		res
 			.status(502)
 			.send('Failed to connect your Spotify account. Check the server logs and try again.');
@@ -66,6 +68,7 @@ export async function sync(req: Request, res: Response) {
 				ticktickTaskCreated = true;
 			} catch (err) {
 				console.error(`[${req.requestId}] failed to create TickTick task:`, err);
+				discordService.notifyErrorDM(req.requestId, 'failed to create TickTick task', err);
 			}
 		}
 
@@ -76,6 +79,8 @@ export async function sync(req: Request, res: Response) {
 			]);
 			discordMessageSent = true;
 		} catch (err) {
+			// Not notified via Discord — if sending to Discord just failed, another
+			// Discord DM won't reach you either.
 			console.error(`[${req.requestId}] failed to send Discord summary:`, err);
 		}
 
@@ -86,6 +91,7 @@ export async function sync(req: Request, res: Response) {
 			return res.status(409).json({ error: err.message });
 		}
 		console.error(`[${req.requestId}] Spotify sync failed:`, err);
+		discordService.notifyErrorDM(req.requestId, 'Spotify sync failed', err);
 		res.status(502).json({ error: 'Spotify sync failed' });
 	}
 }

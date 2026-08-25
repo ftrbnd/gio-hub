@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import * as discordService from '@/services/discord.service';
 import * as ticktickService from '@/services/ticktick.service';
 
 export async function loginRedirect(req: Request, res: Response) {
@@ -8,6 +9,7 @@ export async function loginRedirect(req: Request, res: Response) {
 		res.redirect(url);
 	} catch (err) {
 		console.error(`[${req.requestId}] failed to start TickTick OAuth flow:`, err);
+		discordService.notifyErrorDM(req.requestId, 'failed to start TickTick OAuth flow', err);
 		res.status(500).json({ error: 'Failed to start TickTick OAuth flow' });
 	}
 }
@@ -41,6 +43,7 @@ export async function callback(req: Request, res: Response) {
 		res.send('TickTick connected — you can close this tab.');
 	} catch (err) {
 		console.error(`[${req.requestId}] TickTick OAuth callback failed:`, err);
+		discordService.notifyErrorDM(req.requestId, 'TickTick OAuth callback failed', err);
 		res
 			.status(502)
 			.send('Failed to connect your TickTick account. Check the server logs and try again.');
@@ -56,6 +59,7 @@ export async function projects(req: Request, res: Response) {
 			return res.status(409).json({ error: err.message });
 		}
 		console.error(`[${req.requestId}] failed to list TickTick projects:`, err);
+		discordService.notifyErrorDM(req.requestId, 'failed to list TickTick projects', err);
 		res.status(502).json({ error: 'Failed to list TickTick projects' });
 	}
 }

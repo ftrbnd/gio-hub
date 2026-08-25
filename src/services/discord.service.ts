@@ -45,3 +45,26 @@ export async function sendEmbed(
 		}),
 	);
 }
+
+export async function notifyError(context: string, err?: unknown): Promise<void> {
+	const message = err === undefined ? undefined : err instanceof Error ? err.message : String(err);
+	const stack = err instanceof Error ? err.stack : undefined;
+
+	await sendEmbed({
+		title: 'gio-hub error',
+		description: message ? `**${context}**\n${message}` : `**${context}**`,
+		color: 0xed4245,
+		fields: stack
+			? [{ name: 'Stack', value: `\`\`\`${stack.slice(0, 1000)}\`\`\`` }]
+			: undefined,
+	});
+}
+
+// Fire-and-forget: logs to the console if the DM itself fails, but never
+// throws back into the caller (an error path is the wrong place to await
+// a network call, or to let a Discord outage compound the original error).
+export function notifyErrorDM(requestId: string | undefined, context: string, err?: unknown): void {
+	notifyError(context, err).catch((notifyErr) =>
+		console.error(`[${requestId}] failed to send Discord error DM:`, notifyErr),
+	);
+}

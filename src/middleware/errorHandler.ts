@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { MulterError } from 'multer';
+import * as discordService from '@/services/discord.service';
 
 // Multer errors (e.g. file too large) land here rather than crashing the process.
 export function errorHandler(
@@ -13,5 +14,6 @@ export function errorHandler(
 		return res.status(400).json({ error: err.message });
 	}
 	console.error(`[${req.requestId}] unexpected error:`, err);
+	discordService.notifyErrorDM(req.requestId, `${req.method} ${req.originalUrl}`, err);
 	res.status(500).json({ error: 'Unexpected server error' });
 }
