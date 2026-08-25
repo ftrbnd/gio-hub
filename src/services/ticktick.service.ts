@@ -1,5 +1,7 @@
+import { ButtonStyleTypes, MessageComponentTypes } from 'discord-interactions';
 import { redis } from '@/config/redis';
 import { requireEnv } from '@/lib/env';
+import { DiscordActionRow } from '@/models/discord.model';
 import {
 	TickTickProjectsResponseSchema,
 	TickTickTaskResponseSchema,
@@ -12,6 +14,32 @@ import {
 
 const TICKTICK_API_BASE = 'https://api.ticktick.com/open/v1';
 const SCOPES = 'tasks:write tasks:read';
+
+const REMINDER_ENABLED_KEY = 'ticktick:reminder_enabled';
+export const REMINDER_TOGGLE_CUSTOM_ID = 'toggle_ticktick_reminder';
+
+export async function isReminderEnabled(): Promise<boolean> {
+	const value = await redis.get<boolean>(REMINDER_ENABLED_KEY);
+	return value ?? true;
+}
+
+export async function setReminderEnabled(enabled: boolean): Promise<void> {
+	await redis.set(REMINDER_ENABLED_KEY, enabled);
+}
+
+export function reminderToggleButtonRow(enabled: boolean): DiscordActionRow {
+	return {
+		type: MessageComponentTypes.ACTION_ROW,
+		components: [
+			{
+				type: MessageComponentTypes.BUTTON,
+				custom_id: REMINDER_TOGGLE_CUSTOM_ID,
+				label: enabled ? 'TickTick Reminder: On' : 'TickTick Reminder: Off',
+				style: enabled ? ButtonStyleTypes.SUCCESS : ButtonStyleTypes.SECONDARY,
+			},
+		],
+	};
+}
 
 export class TickTickNotConnectedError extends Error {
 	constructor() {

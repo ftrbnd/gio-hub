@@ -29,5 +29,7 @@ export const SyncResultSchema = z.object({
 	playlistId: z.string(),
 	added: z.array(z.string()),
 	alreadyPresent: z.array(z.string()),
+	topTracks: z.array(z.string()),
+	weekRange: z.string(),
 });
 export type SyncResult = z.infer<typeof SyncResultSchema>;

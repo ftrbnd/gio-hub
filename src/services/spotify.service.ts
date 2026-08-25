@@ -1,5 +1,6 @@
 import { redis } from '@/config/redis';
 import { requireEnv } from '@/lib/env';
+import { DiscordEmbed } from '@/models/discord.model';
 import {
 	SpotifyCreatePlaylistResponseSchema,
 	SpotifyTokenResponseSchema,
@@ -224,5 +225,27 @@ export async function runWeeklySync(): Promise<SyncResult> {
 		playlistId,
 		added: newTracks.map(trackLabel),
 		alreadyPresent: alreadyPresentTracks.map(trackLabel),
+		topTracks: topTracks.map(trackLabel),
+		weekRange: weekRangeLabel(),
+	};
+}
+
+function formatShortDate(date: Date): string {
+	return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
+}
+
+export function weekRangeLabel(end = new Date()): string {
+	const start = new Date(end);
+	start.setDate(start.getDate() - 7);
+	return `${formatShortDate(start)} - ${formatShortDate(end)}`;
+}
+
+export function weeklySummaryEmbed(result: SyncResult): DiscordEmbed {
+	return {
+		title: 'Your Spotify top tracks this week',
+		url: playlistUrl(result.playlistId),
+		color: 0x1db954,
+		description: result.topTracks.map((track, i) => `${i + 1}. ${track}`).join('\n'),
+		fields: [{ name: 'Week', value: result.weekRange }],
 	};
 }

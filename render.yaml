@@ -30,3 +30,9 @@ services:
         sync: false
       - key: TICKTICK_PROJECT_ID
         sync: false
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: DISCORD_USER_ID
+        sync: false
+      - key: DISCORD_PUBLIC_KEY
+        sync: false

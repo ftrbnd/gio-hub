@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import * as discordService from '@/services/discord.service';
 import * as spotifyService from '@/services/spotify.service';
 import * as ticktickService from '@/services/ticktick.service';
 
@@ -56,15 +57,29 @@ export async function sync(req: Request, res: Response) {
 		const result = await spotifyService.runWeeklySync();
 		console.log(`[${req.requestId}] Spotify sync complete: ${JSON.stringify(result)}`);
 
+		const reminderEnabled = await ticktickService.isReminderEnabled();
+
 		let ticktickTaskCreated = false;
-		try {
-			await ticktickService.createCheckPlaylistTask(spotifyService.playlistUrl(result.playlistId));
-			ticktickTaskCreated = true;
-		} catch (err) {
-			console.error(`[${req.requestId}] failed to create TickTick task:`, err);
+		if (reminderEnabled) {
+			try {
+				await ticktickService.createCheckPlaylistTask(spotifyService.playlistUrl(result.playlistId));
+				ticktickTaskCreated = true;
+			} catch (err) {
+				console.error(`[${req.requestId}] failed to create TickTick task:`, err);
+			}
 		}
 
-		res.json({ ...result, ticktickTaskCreated });
+		let discordMessageSent = false;
+		try {
+			await discordService.sendEmbed(spotifyService.weeklySummaryEmbed(result), [
+				ticktickService.reminderToggleButtonRow(reminderEnabled),
+			]);
+			discordMessageSent = true;
+		} catch (err) {
+			console.error(`[${req.requestId}] failed to send Discord summary:`, err);
+		}
+
+		res.json({ ...result, ticktickTaskCreated, discordMessageSent });
 	} catch (err) {
 		if (err instanceof spotifyService.SpotifyNotConnectedError) {
 			console.warn(`[${req.requestId}] Spotify sync skipped: not connected`);
