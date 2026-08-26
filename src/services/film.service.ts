@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { ButtonStyleTypes, MessageComponentTypes } from 'discord-interactions';
+import sharp from 'sharp';
 import { anthropic } from '@/config/anthropic';
 import { cloudinary, ensureCloudinaryConfigured } from '@/config/cloudinary';
 import { redis } from '@/config/redis';
@@ -147,7 +148,10 @@ export async function detectOrientation(
 	return decision;
 }
 
-async function downloadAsDataUri(sourceUrl: string, publicId: string): Promise<string> {
+async function downloadAsset(
+	sourceUrl: string,
+	publicId: string,
+): Promise<{ buffer: Buffer; contentType: string }> {
 	const download = await fetch(sourceUrl);
 	if (!download.ok) {
 		throw new Error(
@@ -158,7 +162,16 @@ async function downloadAsDataUri(sourceUrl: string, publicId: string): Promise<s
 	const contentType =
 		download.headers.get('content-type') || 'application/octet-stream';
 	const buffer = Buffer.from(await download.arrayBuffer());
+	return { buffer, contentType };
+}
+
+function toDataUri(buffer: Buffer, contentType: string): string {
 	return `data:${contentType};base64,${buffer.toString('base64')}`;
+}
+
+async function downloadAsDataUri(sourceUrl: string, publicId: string): Promise<string> {
+	const { buffer, contentType } = await downloadAsset(sourceUrl, publicId);
+	return toDataUri(buffer, contentType);
 }
 
 function assetSourceUrl(
@@ -188,6 +201,117 @@ async function overwriteAsset(
 		unique_filename: false,
 		transformation,
 	});
+}
+
+/** Pad bar colors we may have written (current + previous pure white). */
+const PAD_COLORS = [
+	{ r: 244, g: 244, b: 245 }, // #f4f4f5
+	{ r: 255, g: 255, b: 255 }, // #ffffff
+] as const;
+const PAD_COLOR_TOLERANCE = 14;
+const MIN_BAR_WIDTH_PX = 8;
+const BAR_COLUMN_MATCH_RATIO = 0.95;
+
+function isPadPixel(r: number, g: number, b: number): boolean {
+	return PAD_COLORS.some(
+		(c) =>
+			Math.abs(r - c.r) <= PAD_COLOR_TOLERANCE &&
+			Math.abs(g - c.g) <= PAD_COLOR_TOLERANCE &&
+			Math.abs(b - c.b) <= PAD_COLOR_TOLERANCE,
+	);
+}
+
+/**
+ * Detect symmetric side letterbox bars (from a prior pad-to-3:2). Returns
+ * the bar width to crop from each side on the *full-resolution* image, or 0.
+ */
+export async function detectVerticalBarWidth(buffer: Buffer): Promise<number> {
+	const meta = await sharp(buffer).metadata();
+	const fullWidth = meta.width ?? 0;
+	const fullHeight = meta.height ?? 0;
+	// Side bars only appear on landscape canvases (padded portraits).
+	if (fullWidth <= fullHeight || fullWidth === 0) return 0;
+
+	const previewWidth = Math.min(800, fullWidth);
+	const scale = previewWidth / fullWidth;
+
+	const { data, info } = await sharp(buffer)
+		.resize({ width: previewWidth, withoutEnlargement: true })
+		.ensureAlpha()
+		.raw()
+		.toBuffer({ resolveWithObject: true });
+
+	const { width, height, channels } = info;
+	const step = Math.max(1, Math.floor(height / 120));
+
+	function columnIsBar(x: number): boolean {
+		let match = 0;
+		let samples = 0;
+		for (let y = 0; y < height; y += step) {
+			const i = (y * width + x) * channels;
+			samples++;
+			if (isPadPixel(data[i], data[i + 1], data[i + 2])) match++;
+		}
+		return samples > 0 && match / samples >= BAR_COLUMN_MATCH_RATIO;
+	}
+
+	let left = 0;
+	const maxBar = Math.floor(width / 3);
+	while (left < maxBar && columnIsBar(left)) left++;
+
+	let right = 0;
+	while (right < maxBar && columnIsBar(width - 1 - right)) right++;
+
+	const minPreviewBar = Math.max(2, Math.round(MIN_BAR_WIDTH_PX * scale));
+	if (left < minPreviewBar || right < minPreviewBar) return 0;
+	// Letterboxing should be roughly symmetric.
+	if (Math.abs(left - right) > Math.max(left, right) * 0.3) return 0;
+
+	return Math.max(MIN_BAR_WIDTH_PX, Math.round(Math.min(left, right) / scale));
+}
+
+/**
+ * If the image has vertical pad bars, crop them off so a subsequent rotate
+ * does not turn side bars into a border around the whole frame.
+ */
+export async function stripVerticalPadBars(
+	buffer: Buffer,
+	contentType: string,
+): Promise<{ buffer: Buffer; contentType: string; stripped: boolean }> {
+	const barWidth = await detectVerticalBarWidth(buffer);
+	if (barWidth === 0) {
+		return { buffer, contentType, stripped: false };
+	}
+
+	const meta = await sharp(buffer).metadata();
+	const width = meta.width ?? 0;
+	const height = meta.height ?? 0;
+	if (width <= barWidth * 2) {
+		return { buffer, contentType, stripped: false };
+	}
+
+	let pipeline = sharp(buffer).extract({
+		left: barWidth,
+		top: 0,
+		width: width - barWidth * 2,
+		height,
+	});
+
+	const format = meta.format;
+	let outType = contentType;
+	if (format === 'png') {
+		pipeline = pipeline.png();
+		outType = 'image/png';
+	} else if (format === 'webp') {
+		pipeline = pipeline.webp({ quality: 95 });
+		outType = 'image/webp';
+	} else {
+		pipeline = pipeline.jpeg({ quality: 95, mozjpeg: true });
+		outType = 'image/jpeg';
+	}
+
+	const cropped = await pipeline.toBuffer();
+	return { buffer: cropped, contentType: outType, stripped: true };
 }
 
 /**
@@ -228,7 +352,12 @@ export async function rotateAsset(
 	// URLs as an upload source. Download the bytes ourselves, then re-upload
 	// with an incoming angle transformation so the stored original is replaced.
 	// Prefer a versioned secureUrl so we do not re-download a stale CDN copy.
-	const dataUri = await downloadAsDataUri(assetSourceUrl(asset), asset.publicId);
+	const downloaded = await downloadAsset(assetSourceUrl(asset), asset.publicId);
+	const stripped = await stripVerticalPadBars(
+		downloaded.buffer,
+		downloaded.contentType,
+	);
+	const dataUri = toDataUri(stripped.buffer, stripped.contentType);
 
 	const result = await overwriteAsset(asset, dataUri, [{ angle }]);
 
