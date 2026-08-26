@@ -147,60 +147,124 @@ export async function detectOrientation(
 	return decision;
 }
 
-export async function rotateAsset(
-	asset: Pick<FilmAsset, 'publicId' | 'assetFolder'> & { secureUrl?: string },
-	angle: RotateAngle,
-): Promise<string> {
-	ensureCloudinaryConfigured();
+async function downloadAsDataUri(sourceUrl: string, publicId: string): Promise<string> {
+	const download = await fetch(sourceUrl);
+	if (!download.ok) {
+		throw new Error(
+			`Failed to download ${publicId}: HTTP ${download.status}`,
+		);
+	}
 
-	// Cloudinary often returns HTTP 420 when asked to fetch its own delivery
-	// URLs as an upload source. Download the bytes ourselves, then re-upload
-	// with an incoming angle transformation so the stored original is replaced.
-	// Prefer a versioned secureUrl so we do not re-download a stale CDN copy.
-	const sourceUrl =
+	const contentType =
+		download.headers.get('content-type') || 'application/octet-stream';
+	const buffer = Buffer.from(await download.arrayBuffer());
+	return `data:${contentType};base64,${buffer.toString('base64')}`;
+}
+
+function assetSourceUrl(
+	asset: Pick<FilmAsset, 'publicId'> & { secureUrl?: string },
+): string {
+	return (
 		asset.secureUrl ||
 		cloudinary.url(asset.publicId, {
 			secure: true,
 			resource_type: 'image',
 			type: 'upload',
-		});
+		})
+	);
+}
 
-	const download = await fetch(sourceUrl);
-	if (!download.ok) {
-		throw new Error(
-			`Failed to download ${asset.publicId} for rotation: HTTP ${download.status}`,
-		);
-	}
-
-	const contentType = download.headers.get('content-type') || 'application/octet-stream';
-	const buffer = Buffer.from(await download.arrayBuffer());
-	const dataUri = `data:${contentType};base64,${buffer.toString('base64')}`;
-
-	const result = await cloudinary.uploader.upload(dataUri, {
+async function overwriteAsset(
+	asset: Pick<FilmAsset, 'publicId' | 'assetFolder'>,
+	dataUri: string,
+	transformation: Record<string, unknown>[],
+) {
+	return cloudinary.uploader.upload(dataUri, {
 		public_id: asset.publicId,
 		overwrite: true,
 		invalidate: true,
 		asset_folder: asset.assetFolder,
 		use_filename: true,
 		unique_filename: false,
-		transformation: [{ angle }],
+		transformation,
 	});
+}
 
-	return result.secure_url;
+/**
+ * If the image is portrait (taller than wide), pad with white bars to 3:2
+ * landscape. Horizontal images are left unchanged.
+ */
+export async function padVerticalToLandscape(
+	asset: Pick<FilmAsset, 'publicId' | 'assetFolder'> & {
+		secureUrl?: string;
+		width: number;
+		height: number;
+	},
+): Promise<{ secureUrl: string; padded: boolean }> {
+	ensureCloudinaryConfigured();
+
+	if (asset.width >= asset.height) {
+		return {
+			secureUrl: asset.secureUrl || assetSourceUrl(asset),
+			padded: false,
+		};
+	}
+
+	const dataUri = await downloadAsDataUri(assetSourceUrl(asset), asset.publicId);
+	const result = await overwriteAsset(asset, dataUri, [
+		{ aspect_ratio: '3:2', crop: 'pad', background: 'white' },
+	]);
+
+	return { secureUrl: result.secure_url, padded: true };
+}
+
+export async function rotateAsset(
+	asset: Pick<FilmAsset, 'publicId' | 'assetFolder'> & { secureUrl?: string },
+	angle: RotateAngle,
+): Promise<{ secureUrl: string; padded: boolean }> {
+	ensureCloudinaryConfigured();
+
+	// Cloudinary often returns HTTP 420 when asked to fetch its own delivery
+	// URLs as an upload source. Download the bytes ourselves, then re-upload
+	// with an incoming angle transformation so the stored original is replaced.
+	// Prefer a versioned secureUrl so we do not re-download a stale CDN copy.
+	const dataUri = await downloadAsDataUri(assetSourceUrl(asset), asset.publicId);
+
+	const result = await overwriteAsset(asset, dataUri, [{ angle }]);
+
+	return padVerticalToLandscape({
+		publicId: asset.publicId,
+		assetFolder: asset.assetFolder,
+		secureUrl: result.secure_url,
+		width: result.width,
+		height: result.height,
+	});
 }
 
 async function orientOneAsset(asset: FilmAsset): Promise<OrientAssetResult> {
 	try {
 		const decision = await detectOrientation(asset);
 		if (!decision.rotate || decision.angle === 0) {
-			return { publicId: asset.publicId, rotated: false, angle: 0 };
+			const padded = await padVerticalToLandscape(asset);
+			if (!padded.padded) {
+				return { publicId: asset.publicId, rotated: false, angle: 0 };
+			}
+			return {
+				publicId: asset.publicId,
+				rotated: false,
+				angle: 0,
+				padded: true,
+				secureUrl: padded.secureUrl,
+				assetFolder: asset.assetFolder,
+			};
 		}
 
-		const secureUrl = await rotateAsset(asset, decision.angle);
+		const { secureUrl, padded } = await rotateAsset(asset, decision.angle);
 		return {
 			publicId: asset.publicId,
 			rotated: true,
 			angle: decision.angle,
+			padded,
 			secureUrl,
 			assetFolder: asset.assetFolder,
 		};
@@ -239,7 +303,7 @@ export async function createReviewSession(
 ): Promise<{ sessionId: string; session: FilmReviewSession } | null> {
 	const photos: FilmReviewPhoto[] = result.results
 		.filter((r): r is OrientAssetResult & { secureUrl: string; assetFolder: string } =>
-			Boolean(r.rotated && r.secureUrl && r.assetFolder),
+			Boolean(r.secureUrl && r.assetFolder && (r.rotated || r.padded)),
 		)
 		.map((r) => ({
 			publicId: r.publicId,
@@ -362,7 +426,7 @@ export function reviewEmbed(session: FilmReviewSession): DiscordEmbed {
 
 	return {
 		title: name,
-		description: `Rotated **${session.photos.length}** ${photoWord} in \`${session.folder}\` (${session.checked} checked${failedNote}).`,
+		description: `Updated **${session.photos.length}** ${photoWord} in \`${session.folder}\` (${session.checked} checked${failedNote}). Portrait frames are padded to 3:2 with white bars.`,
 		color: session.failed > 0 ? 0xfaa61a : 0x57f287,
 		image: { url: photo.secureUrl },
 		footer: {
@@ -410,7 +474,7 @@ export async function applyReviewRotation(
 	}
 
 	const photo = session.photos[session.index];
-	const secureUrl = await rotateAsset(
+	const { secureUrl } = await rotateAsset(
 		{
 			publicId: photo.publicId,
 			assetFolder: photo.assetFolder,

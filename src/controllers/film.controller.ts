@@ -33,9 +33,12 @@ export async function orientFolder(req: Request, res: Response) {
 				);
 				await discordService.sendEmbed(payload.embeds[0], payload.components);
 			} else {
-				const photoWord = result.rotated === 1 ? 'photo' : 'photos';
+				const changed = result.results.filter(
+					(r) => r.rotated || r.padded,
+				).length;
+				const photoWord = changed === 1 ? 'photo' : 'photos';
 				await discordService.sendDirectMessage(
-					`Rotated **${result.rotated}** ${photoWord} in \`${folder}\` (${result.checked} checked).`,
+					`Updated **${changed}** ${photoWord} in \`${folder}\` (${result.checked} checked, ${result.rotated} rotated).`,
 				);
 			}
 		} catch (err) {
