@@ -148,25 +148,42 @@ export async function detectOrientation(
 }
 
 export async function rotateAsset(
-	asset: Pick<FilmAsset, 'publicId' | 'assetFolder'>,
+	asset: Pick<FilmAsset, 'publicId' | 'assetFolder'> & { secureUrl?: string },
 	angle: RotateAngle,
 ): Promise<string> {
 	ensureCloudinaryConfigured();
 
-	const sourceUrl = cloudinary.url(asset.publicId, {
-		secure: true,
-		resource_type: 'image',
-		type: 'upload',
-		transformation: [{ angle }],
-	});
+	// Cloudinary often returns HTTP 420 when asked to fetch its own delivery
+	// URLs as an upload source. Download the bytes ourselves, then re-upload
+	// with an incoming angle transformation so the stored original is replaced.
+	// Prefer a versioned secureUrl so we do not re-download a stale CDN copy.
+	const sourceUrl =
+		asset.secureUrl ||
+		cloudinary.url(asset.publicId, {
+			secure: true,
+			resource_type: 'image',
+			type: 'upload',
+		});
 
-	const result = await cloudinary.uploader.upload(sourceUrl, {
+	const download = await fetch(sourceUrl);
+	if (!download.ok) {
+		throw new Error(
+			`Failed to download ${asset.publicId} for rotation: HTTP ${download.status}`,
+		);
+	}
+
+	const contentType = download.headers.get('content-type') || 'application/octet-stream';
+	const buffer = Buffer.from(await download.arrayBuffer());
+	const dataUri = `data:${contentType};base64,${buffer.toString('base64')}`;
+
+	const result = await cloudinary.uploader.upload(dataUri, {
 		public_id: asset.publicId,
 		overwrite: true,
 		invalidate: true,
 		asset_folder: asset.assetFolder,
 		use_filename: true,
 		unique_filename: false,
+		transformation: [{ angle }],
 	});
 
 	return result.secure_url;
@@ -297,13 +314,13 @@ export function reviewButtonRows(
 				{
 					type: MessageComponentTypes.BUTTON,
 					custom_id: `film:rot:90:${sessionId}`,
-					label: '90° CW',
+					label: '↻ 90°',
 					style: ButtonStyleTypes.PRIMARY,
 				},
 				{
 					type: MessageComponentTypes.BUTTON,
 					custom_id: `film:rot:-90:${sessionId}`,
-					label: '90° CCW',
+					label: '↺ 90°',
 					style: ButtonStyleTypes.PRIMARY,
 				},
 				{
@@ -394,7 +411,11 @@ export async function applyReviewRotation(
 
 	const photo = session.photos[session.index];
 	const secureUrl = await rotateAsset(
-		{ publicId: photo.publicId, assetFolder: photo.assetFolder },
+		{
+			publicId: photo.publicId,
+			assetFolder: photo.assetFolder,
+			secureUrl: photo.secureUrl,
+		},
 		angle,
 	);
 

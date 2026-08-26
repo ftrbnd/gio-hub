@@ -379,7 +379,7 @@ curl -X POST http://localhost:3000/film/orient \
 Expect `202` with `{"accepted":true,"folder":"..."}`. When the job finishes
 you get a Discord DM showing the **first rotated photo** (name + image) with:
 
-- Row 1: **90° CW**, **90° CCW**, **180°** — apply an alternate rotation to the
+- Row 1: **↻ 90°**, **↺ 90°**, **180°** — apply an alternate rotation to the
   photo currently shown (overwrites Cloudinary).
 - Row 2: **Previous** / **Next** — step through the other rotated photos.
 
