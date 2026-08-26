@@ -25,7 +25,7 @@ export type OrientAssetResult = {
 	publicId: string;
 	rotated: boolean;
 	angle: 0 | 90 | -90;
-	/** True when white bars were added to pad a portrait frame to 3:2. */
+	/** True when #f4f4f5 bars were added to pad a portrait frame to 3:2. */
 	padded?: boolean;
 	/** Delivery URL after a successful rotate/pad (for Discord links). */
 	secureUrl?: string;

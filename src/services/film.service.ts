@@ -191,7 +191,7 @@ async function overwriteAsset(
 }
 
 /**
- * If the image is portrait (taller than wide), pad with white bars to 3:2
+ * If the image is portrait (taller than wide), pad with #f4f4f5 bars to 3:2
  * landscape. Horizontal images are left unchanged.
  */
 export async function padVerticalToLandscape(
@@ -212,7 +212,7 @@ export async function padVerticalToLandscape(
 
 	const dataUri = await downloadAsDataUri(assetSourceUrl(asset), asset.publicId);
 	const result = await overwriteAsset(asset, dataUri, [
-		{ aspect_ratio: '3:2', crop: 'pad', background: 'white' },
+		{ aspect_ratio: '3:2', crop: 'pad', background: 'rgb:f4f4f5' },
 	]);
 
 	return { secureUrl: result.secure_url, padded: true };
@@ -426,7 +426,7 @@ export function reviewEmbed(session: FilmReviewSession): DiscordEmbed {
 
 	return {
 		title: name,
-		description: `Updated **${session.photos.length}** ${photoWord} in \`${session.folder}\` (${session.checked} checked${failedNote}). Portrait frames are padded to 3:2 with white bars.`,
+		description: `Updated **${session.photos.length}** ${photoWord} in \`${session.folder}\` (${session.checked} checked${failedNote}). Portrait frames are padded to 3:2.`,
 		color: session.failed > 0 ? 0xfaa61a : 0x57f287,
 		image: { url: photo.secureUrl },
 		footer: {
