@@ -46,6 +46,20 @@ export async function sendEmbed(
 	);
 }
 
+/** Edit the original message for a deferred component interaction. */
+export async function editInteractionMessage(
+	applicationId: string,
+	interactionToken: string,
+	data: { embeds?: DiscordEmbed[]; components?: DiscordActionRow[]; content?: string },
+): Promise<void> {
+	DiscordMessageResponseSchema.parse(
+		await discordRest.patch(
+			Routes.webhookMessage(applicationId, interactionToken, '@original'),
+			{ body: data, auth: false },
+		),
+	);
+}
+
 export async function notifyError(context: string, err?: unknown): Promise<void> {
 	const message = err === undefined ? undefined : err instanceof Error ? err.message : String(err);
 	const stack = err instanceof Error ? err.stack : undefined;

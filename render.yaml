@@ -8,6 +8,8 @@ services:
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: CLOUDINARY_URL
+        sync: false
       - key: API_SECRET
         sync: false
       - key: CRON_SECRET

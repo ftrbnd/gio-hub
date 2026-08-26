@@ -15,8 +15,12 @@ tools that don't need a UI of their own:
    that week's top tracks. Also ships with a standalone test endpoint; other
    modules can call `discordService.sendDirectMessage()` to notify you of
    anything else.
+5. **Film orientation** — after film-sync uploads a roll to Cloudinary, it
+   pings `POST /film/orient` with the folder name. Claude checks each
+   landscape scan for sideways portrait frames and permanently rotates those
+   assets in Cloudinary.
 
-All four modules share one Express app, one deploy, and one set of conventions:
+All five modules share one Express app, one deploy, and one set of conventions:
 routes → controllers → services → models, each request authenticated with a
 bearer secret.
 
@@ -348,3 +352,36 @@ between "On" and "Off", and subsequent syncs should respect it: `off` means
 `/spotify/sync` still updates the playlist and sends the Discord summary, but
 skips creating the TickTick task (`ticktickTaskCreated: false` in the
 response).
+
+---
+
+## Module 5: Film orientation
+
+Film scans land in Cloudinary as landscape files. Some frames were shot
+portrait and appear sideways. film-sync calls this endpoint after each
+successful upload; Claude inspects every image in the folder and permanently
+rotates the ones that should be vertical.
+
+**Env vars:** `API_SECRET` (same bearer secret film-sync sends),
+`CLOUDINARY_URL` (same `cloudinary://…` value as film-sync — Console →
+Settings → API Keys), `ANTHROPIC_API_KEY` (vision), plus Discord vars if you
+want the completion DM.
+
+### Testing
+
+```bash
+curl -X POST http://localhost:3000/film/orient \
+  -H "Authorization: Bearer <your API_SECRET>" \
+  -H "Content-Type: application/json" \
+  -d '{"folder":"<cloudinary-folder-name>"}'
+```
+
+Expect `202` with `{"accepted":true,"folder":"..."}`. When the job finishes
+you get a Discord DM showing the **first rotated photo** (name + image) with:
+
+- Row 1: **90° CW**, **90° CCW**, **180°** — apply an alternate rotation to the
+  photo currently shown (overwrites Cloudinary).
+- Row 2: **Previous** / **Next** — step through the other rotated photos.
+
+Buttons stay usable for 7 days (session stored in Upstash Redis). If nothing
+was rotated, you get a plain count message instead.

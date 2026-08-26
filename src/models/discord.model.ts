@@ -14,6 +14,8 @@ export interface DiscordEmbed {
 	url?: string;
 	color?: number;
 	fields?: { name: string; value: string; inline?: boolean }[];
+	image?: { url: string };
+	footer?: { text: string };
 }
 
 export interface DiscordButton {
@@ -21,6 +23,7 @@ export interface DiscordButton {
 	custom_id: string;
 	label: string;
 	style: number;
+	disabled?: boolean;
 }
 
 export interface DiscordActionRow {
