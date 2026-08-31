@@ -7,7 +7,7 @@ import * as ticktickService from '@/services/ticktick.service';
 export async function sendTestMessage(req: Request, res: Response) {
 	try {
 		await discordService.sendDirectMessage(
-			'gio-hub: this is a test message — Discord DMs are wired up correctly.',
+			'gHub: this is a test message — Discord DMs are wired up correctly.',
 		);
 		res.json({ sent: true });
 	} catch (err) {

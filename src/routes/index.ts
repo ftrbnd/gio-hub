@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import adminRoutes from './admin.routes';
 import discordRoutes from './discord.routes';
 import filmRoutes from './film.routes';
 import healthRoutes from './health.routes';
@@ -8,6 +9,7 @@ import ticktickRoutes from './ticktick.routes';
 
 const router = Router();
 
+router.use(adminRoutes);
 router.use(discordRoutes);
 router.use(filmRoutes);
 router.use(healthRoutes);

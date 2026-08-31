@@ -65,7 +65,7 @@ export async function notifyError(context: string, err?: unknown): Promise<void>
 	const stack = err instanceof Error ? err.stack : undefined;
 
 	await sendEmbed({
-		title: 'gio-hub error',
+		title: 'gHub error',
 		description: message ? `**${context}**\n${message}` : `**${context}**`,
 		color: 0xed4245,
 		fields: stack

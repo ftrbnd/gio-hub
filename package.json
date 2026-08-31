@@ -4,9 +4,11 @@
 	"description": "A personal-app server: parses work schedule photos (ADP screenshot or printed sheet) into calendar shifts using Claude's vision model, and keeps a monthly Spotify playlist stocked with your weekly top tracks.",
 	"main": "dist/index.js",
 	"scripts": {
-		"build": "tsc && tsc-alias",
+		"build": "npm run build:admin && tsc && tsc-alias",
+		"build:admin": "npm --prefix admin ci && npm --prefix admin run build",
 		"start": "node dist/index.js",
-		"dev": "tsx watch src/index.ts"
+		"dev": "tsx watch src/index.ts",
+		"dev:admin": "npm --prefix admin run dev"
 	},
 	"engines": {
 		"node": ">=18"
@@ -15,6 +17,7 @@
 		"@anthropic-ai/sdk": "^0.115.0",
 		"@upstash/redis": "^1.38.2",
 		"cloudinary": "^2.10.1",
+		"cookie-parser": "^1.4.7",
 		"discord-interactions": "^4.4.0",
 		"discord.js": "^14.27.0",
 		"dotenv": "^17.4.2",
@@ -24,6 +27,7 @@
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
+		"@types/cookie-parser": "^1.4.10",
 		"@types/express": "^5.0.6",
 		"@types/multer": "^2.2.0",
 		"@types/node": "^26.1.1",

@@ -49,6 +49,26 @@ export type FilmReviewSession = {
 
 export type RotateAngle = 90 | -90 | 180;
 
+export const FilmRotatePhotoBodySchema = z.object({
+	publicId: z.string().trim().min(1),
+	assetFolder: z.string().trim().min(1),
+	angle: z.union([z.literal(90), z.literal(-90), z.literal(180)]),
+});
+export type FilmRotatePhotoBody = z.infer<typeof FilmRotatePhotoBodySchema>;
+
+export type FilmFolderSummary = {
+	folder: string;
+	lastUploadedAt: string;
+	photoCount: number;
+};
+
+export type FilmPhotoItem = {
+	publicId: string;
+	displayName: string;
+	secureUrl: string;
+	assetFolder: string;
+};
+
 export type OrientFolderResult = {
 	folder: string;
 	checked: number;
