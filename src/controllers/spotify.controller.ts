@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import * as discordService from '@/services/discord.service';
 import * as spotifyService from '@/services/spotify.service';
-import * as ticktickService from '@/services/ticktick.service';
+import * as spotifySyncService from '@/services/spotifySync.service';
 
 export async function loginRedirect(req: Request, res: Response) {
 	try {
@@ -56,35 +56,8 @@ export async function callback(req: Request, res: Response) {
 
 export async function sync(req: Request, res: Response) {
 	try {
-		const result = await spotifyService.runWeeklySync();
-		console.log(`[${req.requestId}] Spotify sync complete: ${JSON.stringify(result)}`);
-
-		const reminderEnabled = await ticktickService.isReminderEnabled();
-
-		let ticktickTaskCreated = false;
-		if (reminderEnabled) {
-			try {
-				await ticktickService.createCheckPlaylistTask(spotifyService.playlistUrl(result.playlistId));
-				ticktickTaskCreated = true;
-			} catch (err) {
-				console.error(`[${req.requestId}] failed to create TickTick task:`, err);
-				discordService.notifyErrorDM(req.requestId, 'failed to create TickTick task', err);
-			}
-		}
-
-		let discordMessageSent = false;
-		try {
-			await discordService.sendEmbed(spotifyService.weeklySummaryEmbed(result), [
-				ticktickService.reminderToggleButtonRow(reminderEnabled),
-			]);
-			discordMessageSent = true;
-		} catch (err) {
-			// Not notified via Discord — if sending to Discord just failed, another
-			// Discord DM won't reach you either.
-			console.error(`[${req.requestId}] failed to send Discord summary:`, err);
-		}
-
-		res.json({ ...result, ticktickTaskCreated, discordMessageSent });
+		const result = await spotifySyncService.runWeeklySyncWithFollowUp(req.requestId);
+		res.json(result);
 	} catch (err) {
 		if (err instanceof spotifyService.SpotifyNotConnectedError) {
 			console.warn(`[${req.requestId}] Spotify sync skipped: not connected`);

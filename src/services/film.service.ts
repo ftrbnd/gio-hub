@@ -7,6 +7,8 @@ import { redis } from '@/config/redis';
 import { DiscordActionRow, DiscordEmbed } from '@/models/discord.model';
 import {
 	FilmAsset,
+	FilmFolderSummary,
+	FilmPhotoItem,
 	FilmReviewPhoto,
 	FilmReviewSession,
 	OrientAssetResult,
@@ -32,6 +34,7 @@ Rules for angle (clockwise degrees applied to the current image):
 
 const REVIEW_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 const REVIEW_SESSION_KEY_PREFIX = 'film:review:';
+const REVIEW_SESSION_INDEX_KEY = 'film:review:sessions';
 
 export const FILM_CUSTOM_ID_PREFIX = 'film:';
 
@@ -42,6 +45,17 @@ function escapeSearchValue(value: string): string {
 function reviewSessionKey(sessionId: string): string {
 	return `${REVIEW_SESSION_KEY_PREFIX}${sessionId}`;
 }
+
+async function trackReviewSession(sessionId: string): Promise<void> {
+	await redis.sadd(REVIEW_SESSION_INDEX_KEY, sessionId);
+}
+
+export type ReviewSessionSummary = {
+	sessionId: string;
+	folder: string;
+	photoCount: number;
+	index: number;
+};
 
 export function displayName(publicId: string): string {
 	const slash = publicId.lastIndexOf('/');
@@ -81,6 +95,164 @@ export async function listAssetsInFolder(folder: string): Promise<FilmAsset[]> {
 	} while (nextCursor);
 
 	return assets;
+}
+
+const FOLDERS_CACHE_MS = 5 * 60 * 1000;
+const PHOTOS_PAGE_SIZE = 12;
+
+let foldersCache: { at: number; folders: FilmFolderSummary[] } | null = null;
+
+function toFilmPhotoItem(asset: FilmAsset): FilmPhotoItem {
+	return {
+		publicId: asset.publicId,
+		displayName: displayName(asset.publicId),
+		secureUrl: asset.secureUrl,
+		assetFolder: asset.assetFolder,
+	};
+}
+
+function assetFromResource(
+	resource: {
+		public_id: string;
+		secure_url: string;
+		width: number;
+		height: number;
+		format: string;
+		asset_folder?: string;
+	},
+	folder: string,
+): FilmAsset {
+	return {
+		publicId: resource.public_id,
+		secureUrl: resource.secure_url,
+		width: resource.width,
+		height: resource.height,
+		format: resource.format,
+		assetFolder: resource.asset_folder ?? folder,
+	};
+}
+
+/** All Cloudinary asset folders, newest upload first. Cached briefly. */
+export async function listFilmFolders(): Promise<FilmFolderSummary[]> {
+	if (foldersCache && Date.now() - foldersCache.at < FOLDERS_CACHE_MS) {
+		return foldersCache.folders;
+	}
+
+	ensureCloudinaryConfigured();
+
+	const byFolder = new Map<string, { lastUploadedAt: string; photoCount: number }>();
+	let nextCursor: string | undefined;
+
+	do {
+		let query = cloudinary.search
+			.expression('resource_type:image')
+			.max_results(500)
+			.sort_by('created_at', 'desc');
+
+		if (nextCursor) {
+			query = query.next_cursor(nextCursor);
+		}
+
+		const page = await query.execute();
+		for (const resource of page.resources ?? []) {
+			const folder = resource.asset_folder as string | undefined;
+			if (!folder) continue;
+
+			const createdAt = (resource.created_at as string) ?? '';
+			const existing = byFolder.get(folder);
+			if (!existing) {
+				byFolder.set(folder, { lastUploadedAt: createdAt, photoCount: 1 });
+			} else {
+				existing.photoCount += 1;
+				if (createdAt > existing.lastUploadedAt) {
+					existing.lastUploadedAt = createdAt;
+				}
+			}
+		}
+		nextCursor = page.next_cursor as string | undefined;
+	} while (nextCursor);
+
+	const folders = Array.from(byFolder.entries())
+		.map(([folder, meta]) => ({
+			folder,
+			lastUploadedAt: meta.lastUploadedAt,
+			photoCount: meta.photoCount,
+		}))
+		.sort((a, b) => b.lastUploadedAt.localeCompare(a.lastUploadedAt));
+
+	foldersCache = { at: Date.now(), folders };
+	return folders;
+}
+
+export function defaultFilmFolder(folders: FilmFolderSummary[]): string | null {
+	return folders[0]?.folder ?? null;
+}
+
+export async function listFolderPhotosPage(
+	folder: string,
+	options: { cursor?: string; pageSize?: number } = {},
+): Promise<{
+	folder: string;
+	photos: FilmPhotoItem[];
+	pageSize: number;
+	total: number;
+	totalPages: number;
+	nextCursor: string | null;
+}> {
+	ensureCloudinaryConfigured();
+
+	const pageSize = options.pageSize ?? PHOTOS_PAGE_SIZE;
+	let query = cloudinary.search
+		.expression(`resource_type:image AND asset_folder="${escapeSearchValue(folder)}"`)
+		.max_results(pageSize)
+		.sort_by('public_id', 'asc');
+
+	if (options.cursor) {
+		query = query.next_cursor(options.cursor);
+	}
+
+	const page = await query.execute();
+	const total = (page.total_count as number) ?? (page.resources ?? []).length;
+	const totalPages = Math.max(1, Math.ceil(total / pageSize));
+	const photos = (page.resources ?? []).map((resource: Record<string, unknown>) =>
+		toFilmPhotoItem(
+			assetFromResource(
+				{
+					public_id: String(resource.public_id),
+					secure_url: String(resource.secure_url),
+					width: Number(resource.width),
+					height: Number(resource.height),
+					format: String(resource.format),
+					asset_folder:
+						typeof resource.asset_folder === 'string' ? resource.asset_folder : undefined,
+				},
+				folder,
+			),
+		),
+	);
+
+	return {
+		folder,
+		photos,
+		pageSize,
+		total,
+		totalPages,
+		nextCursor: (page.next_cursor as string | undefined) ?? null,
+	};
+}
+
+export async function rotatePhotoDirect(
+	publicId: string,
+	assetFolder: string,
+	angle: RotateAngle,
+): Promise<FilmPhotoItem> {
+	const { secureUrl } = await rotateAsset({ publicId, assetFolder }, angle);
+	return {
+		publicId,
+		displayName: displayName(publicId),
+		secureUrl,
+		assetFolder,
+	};
 }
 
 function previewUrl(publicId: string): string {
@@ -454,8 +626,67 @@ export async function createReviewSession(
 	await redis.set(reviewSessionKey(sessionId), session, {
 		ex: REVIEW_SESSION_TTL_SECONDS,
 	});
+	await trackReviewSession(sessionId);
 
 	return { sessionId, session };
+}
+
+/**
+ * Open every image in a Cloudinary folder for manual rotate/nav in the admin UI.
+ */
+export async function createBrowseSession(
+	folder: string,
+): Promise<{ sessionId: string; session: FilmReviewSession } | null> {
+	const assets = await listAssetsInFolder(folder);
+	if (assets.length === 0) return null;
+
+	const sessionId = randomBytes(8).toString('hex');
+	const session: FilmReviewSession = {
+		folder,
+		photos: assets.map((asset) => ({
+			publicId: asset.publicId,
+			assetFolder: asset.assetFolder,
+			secureUrl: asset.secureUrl,
+		})),
+		index: 0,
+		checked: assets.length,
+		failed: 0,
+	};
+
+	await redis.set(reviewSessionKey(sessionId), session, {
+		ex: REVIEW_SESSION_TTL_SECONDS,
+	});
+	await trackReviewSession(sessionId);
+
+	return { sessionId, session };
+}
+
+export async function listReviewSessions(): Promise<ReviewSessionSummary[]> {
+	const ids = await redis.smembers(REVIEW_SESSION_INDEX_KEY);
+	if (!ids.length) return [];
+
+	const summaries: ReviewSessionSummary[] = [];
+	const stale: string[] = [];
+
+	for (const sessionId of ids) {
+		const session = await getReviewSession(sessionId);
+		if (!session) {
+			stale.push(sessionId);
+			continue;
+		}
+		summaries.push({
+			sessionId,
+			folder: session.folder,
+			photoCount: session.photos.length,
+			index: session.index,
+		});
+	}
+
+	if (stale.length > 0) {
+		await redis.srem(REVIEW_SESSION_INDEX_KEY, ...stale);
+	}
+
+	return summaries;
 }
 
 export async function getReviewSession(

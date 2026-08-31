@@ -24,6 +24,10 @@ All five modules share one Express app, one deploy, and one set of conventions:
 routes → controllers → services → models, each request authenticated with a
 bearer secret.
 
+There is also a **web admin dashboard** at `/` (Google sign-in, restricted
+to your personal email) for connection status, manual sync, and film photo
+rotation — see [Admin dashboard](#admin-dashboard) below.
+
 ## Deploy the server to Render
 
 Render's free web service tier needs no credit card and auto-deploys from
@@ -384,4 +388,50 @@ you get a Discord DM showing the **first rotated photo** (name + image) with:
 - Row 2: **Previous** / **Next** — step through the other rotated photos.
 
 Buttons stay usable for 7 days (session stored in Upstash Redis). If nothing
-was rotated, you get a plain count message instead.
+was rotated, you get a plain count message instead. You can also review and
+rotate from the [Admin dashboard](#admin-dashboard) Photos page.
+
+---
+
+## Admin dashboard
+
+A React + Mantine web UI (dark brown & beige with olive green, denim blue, and gray accents) served by this same Express app
+at the site root:
+
+- **Home** (`/`) — integration status, connect Spotify/TickTick, toggle
+  the TickTick reminder, run Spotify sync, Discord test DM, list TickTick
+  projects
+- **Photos** (`/photos`) — pick a Cloudinary folder (latest upload selected by default), browse a paginated gallery (12 per page), and rotate frames in place
+
+The UI lives in [`admin/`](admin/) and builds into `public/` as part of
+`npm run build`. For local UI work with hot reload:
+
+```bash
+npm run dev          # API on :3000
+npm run dev:admin    # Vite on :5173 (proxies /api and /auth)
+```
+
+Open `http://localhost:5173/` while both are running, or build and use
+`http://localhost:3000/` against the Express server alone
+
+### Auth
+
+Sign in with Google. Only the address in `ADMIN_GOOGLE_EMAIL` is allowed.
+Session is an httpOnly signed cookie (`SESSION_SECRET`). API routes under
+`/api/*` require that session. iOS Shortcuts, QStash, and Discord still
+use `API_SECRET` / `CRON_SECRET` as before
+
+**Env vars:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`,
+`ADMIN_GOOGLE_EMAIL`, `SESSION_SECRET`.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+   create an **OAuth 2.0 Client ID** (application type: Web application).
+2. Add authorized redirect URIs:
+   - `http://localhost:3000/auth/google/callback`
+   - `https://<your-render-url>/auth/google/callback`
+3. Put the client id/secret and matching redirect URI in `.env` / Render.
+4. Set `ADMIN_GOOGLE_EMAIL` to your Gmail and generate `SESSION_SECRET`
+   (`openssl rand -hex 32`).
+
+Then open `http://localhost:3000/` (or your Render URL) and **Sign in
+with Google**.

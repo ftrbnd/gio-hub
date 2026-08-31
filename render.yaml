@@ -38,3 +38,13 @@ services:
         sync: false
       - key: DISCORD_PUBLIC_KEY
         sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: ADMIN_GOOGLE_EMAIL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
