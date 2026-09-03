@@ -3,6 +3,8 @@ import * as adminService from '@/services/admin.service';
 import * as adminSession from '@/services/adminSession.service';
 import * as discordService from '@/services/discord.service';
 import * as googleAuth from '@/services/googleAuth.service';
+import * as googleCalendarService from '@/services/googleCalendar.service';
+import * as timeOffReminderService from '@/services/timeOffReminder.service';
 import * as spotifyService from '@/services/spotify.service';
 import * as spotifySyncService from '@/services/spotifySync.service';
 import * as ticktickService from '@/services/ticktick.service';
@@ -141,5 +143,70 @@ export async function testDiscord(req: Request, res: Response) {
 	} catch (err) {
 		console.error(`[${req.requestId}] failed to send Discord DM:`, err);
 		res.status(502).json({ error: 'Failed to send Discord DM' });
+	}
+}
+
+export async function connectCalendar(req: Request, res: Response) {
+	try {
+		const state = await googleCalendarService.createAndStoreOAuthState();
+		res.redirect(googleCalendarService.buildAuthorizeUrl(state));
+	} catch (err) {
+		console.error(`[${req.requestId}] failed to start Google Calendar OAuth from admin:`, err);
+		res.status(500).json({ error: 'Failed to start Google Calendar OAuth' });
+	}
+}
+
+export async function listCalendars(req: Request, res: Response) {
+	try {
+		const list = await googleCalendarService.listCalendars();
+		res.json(list);
+	} catch (err) {
+		if (err instanceof googleCalendarService.GoogleCalendarNotConnectedError) {
+			return res.status(409).json({ error: err.message });
+		}
+		console.error(`[${req.requestId}] failed to list Google calendars from admin:`, err);
+		res.status(502).json({ error: 'Failed to list Google calendars' });
+	}
+}
+
+export async function listTimeOffEvents(req: Request, res: Response) {
+	try {
+		const events = await timeOffReminderService.listTimeOffEvents();
+		res.json({ events });
+	} catch (err) {
+		console.error(`[${req.requestId}] failed to list time off events:`, err);
+		res.status(500).json({ error: 'Failed to list time off events' });
+	}
+}
+
+export async function markTimeOffCompleted(req: Request, res: Response) {
+	const eventId = req.params.eventId;
+	if (!eventId || Array.isArray(eventId)) {
+		return res.status(400).json({ error: 'Missing event id' });
+	}
+
+	try {
+		const updated = await timeOffReminderService.markTimeOffCompleted(eventId);
+		if (!updated) {
+			return res.status(404).json({ error: 'Time off event not found' });
+		}
+		res.json(updated);
+	} catch (err) {
+		console.error(`[${req.requestId}] failed to mark time off completed:`, err);
+		res.status(500).json({ error: 'Failed to mark time off as completed' });
+	}
+}
+
+export async function syncTimeOff(req: Request, res: Response) {
+	try {
+		const result = await timeOffReminderService.runTimeOffSync(req.requestId);
+		res.json(result);
+	} catch (err) {
+		if (err instanceof googleCalendarService.GoogleCalendarNotConnectedError) {
+			return res.status(409).json({ error: err.message });
+		}
+		console.error(`[${req.requestId}] admin time off sync failed:`, err);
+		discordService.notifyErrorDM(req.requestId, 'admin time off sync failed', err);
+		res.status(502).json({ error: 'Time off sync failed' });
 	}
 }

@@ -32,6 +32,8 @@ services:
         sync: false
       - key: TICKTICK_PROJECT_ID
         sync: false
+      - key: TICKTICK_TIME_OFF_PROJECT_ID
+        sync: false
       - key: DISCORD_BOT_TOKEN
         sync: false
       - key: DISCORD_USER_ID
@@ -47,4 +49,12 @@ services:
       - key: ADMIN_GOOGLE_EMAIL
         sync: false
       - key: SESSION_SECRET
+        sync: false
+      - key: GOOGLE_CALENDAR_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_TIME_OFF_CALENDAR_ID
+        sync: false
+      - key: TIME_OFF_REMINDER_LEAD_DAYS
+        sync: false
+      - key: TIME_OFF_LOOKAHEAD_DAYS
         sync: false

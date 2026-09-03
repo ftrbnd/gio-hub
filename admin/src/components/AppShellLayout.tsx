@@ -10,11 +10,67 @@ import {
 	Container,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconLogout, IconPhoto, IconHome } from '@tabler/icons-react';
+import { IconCalendarEvent, IconHome, IconPhoto } from '@tabler/icons-react';
+import type { ReactNode } from 'react';
 import { logout } from '../lib/api';
+import { BrandIcon } from './BrandIcon';
 import { colors } from '../theme';
 
 type Props = { email: string };
+
+type NavItem = {
+	to: string;
+	label: string;
+	end?: boolean;
+	icon: ReactNode;
+};
+
+const personalNav: NavItem[] = [
+	{ to: '/photos', label: 'Photos', icon: <IconPhoto size={18} /> },
+	{ to: '/time-off', label: 'Time off', icon: <IconCalendarEvent size={18} /> },
+];
+
+const externalNav: NavItem[] = [
+	{ to: '/discord', label: 'Discord', icon: <BrandIcon brand="discord" size={18} /> },
+	{ to: '/spotify', label: 'Spotify', icon: <BrandIcon brand="spotify" size={18} /> },
+	{ to: '/ticktick', label: 'TickTick', icon: <BrandIcon brand="ticktick" size={18} /> },
+];
+
+function NavSection({
+	title,
+	items,
+	pathname,
+	onNavigate,
+}: {
+	title: string;
+	items: NavItem[];
+	pathname: string;
+	onNavigate: () => void;
+}) {
+	return (
+		<Stack gap={4}>
+			<Text size="xs" c="dimmed" tt="uppercase" fw={700} mt="sm" mb={4} px="xs">
+				{title}
+			</Text>
+			{items.map((item) => (
+				<NavLink
+					key={item.to}
+					component={RouterNavLink}
+					to={item.to}
+					end={item.end}
+					label={item.label}
+					leftSection={item.icon}
+					onClick={onNavigate}
+					color="forest"
+					variant="filled"
+					active={
+						item.end ? pathname === '/' : pathname.startsWith(item.to)
+					}
+				/>
+			))}
+		</Stack>
+	);
+}
 
 export function AppShellLayout({ email }: Props) {
 	const [opened, { toggle, close }] = useDisclosure();
@@ -57,7 +113,6 @@ export function AppShellLayout({ email }: Props) {
 							variant="outline"
 							color="stone"
 							size="xs"
-							leftSection={<IconLogout size={14} />}
 							onClick={() => {
 								void logout().then(() => {
 									window.location.href = '/';
@@ -76,22 +131,26 @@ export function AppShellLayout({ email }: Props) {
 						component={RouterNavLink}
 						to="/"
 						end
-						label="Home"
+						label="Overview"
 						leftSection={<IconHome size={18} />}
 						onClick={close}
 						color="forest"
 						variant="filled"
 						active={location.pathname === '/'}
 					/>
-					<NavLink
-						component={RouterNavLink}
-						to="/photos"
-						label="Photos"
-						leftSection={<IconPhoto size={18} />}
-						onClick={close}
-						color="forest"
-						variant="filled"
-						active={location.pathname.startsWith('/photos')}
+
+					<NavSection
+						title="Personal"
+						items={personalNav}
+						pathname={location.pathname}
+						onNavigate={close}
+					/>
+
+					<NavSection
+						title="Services"
+						items={externalNav}
+						pathname={location.pathname}
+						onNavigate={close}
 					/>
 				</Stack>
 			</AppShell.Navbar>

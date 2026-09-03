@@ -19,3 +19,11 @@ export const TickTickTaskResponseSchema = z.object({
 	projectId: z.string(),
 	title: z.string(),
 });
+
+export const TickTickTaskDetailSchema = z.object({
+	id: z.string(),
+	projectId: z.string().optional(),
+	title: z.string().optional(),
+	status: z.number().optional(),
+	completedTime: z.string().optional(),
+});

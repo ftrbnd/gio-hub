@@ -47,6 +47,7 @@ export type AdminStatus = {
 		configured: boolean;
 		connected: boolean;
 		monthKey: string;
+		playlistName: string;
 		playlistId: string | null;
 		playlistUrl: string | null;
 	};
@@ -55,6 +56,7 @@ export type AdminStatus = {
 		connected: boolean;
 		reminderEnabled: boolean;
 		projectIdConfigured: boolean;
+		timeOffProjectIdConfigured: boolean;
 	};
 	discord: { configured: boolean };
 	film: {
@@ -64,6 +66,11 @@ export type AdminStatus = {
 	google: {
 		configured: boolean;
 		adminEmailConfigured: boolean;
+	};
+	calendar: {
+		oauthConfigured: boolean;
+		connected: boolean;
+		timeOffCalendarConfigured: boolean;
 	};
 };
 
@@ -79,6 +86,30 @@ export type SyncResult = {
 };
 
 export type TickTickProject = { id: string; name: string };
+
+export type GoogleCalendarSummary = { id: string; summary: string; primary?: boolean };
+
+export type TimeOffEvent = {
+	eventId: string;
+	title: string;
+	start: string;
+	end: string;
+	calendarId: string;
+	status: 'reminder_created' | 'completed';
+	ticktickTaskId?: string;
+	ticktickProjectId?: string;
+	reminderCreatedAt?: string;
+	reminderDueDate?: string;
+	completedAt?: string;
+};
+
+export type TimeOffSyncResult = {
+	scanned: number;
+	remindersCreated: number;
+	completionsDetected: number;
+	skipped: number;
+	errors: string[];
+};
 
 export type FilmFolderSummary = {
 	folder: string;
@@ -174,6 +205,25 @@ export function listProjects() {
 
 export function testDiscord() {
 	return api<{ sent: boolean }>('/api/discord/test', { method: 'POST' });
+}
+
+export function listCalendars() {
+	return api<GoogleCalendarSummary[]>('/api/calendar/calendars');
+}
+
+export function listTimeOffEvents() {
+	return api<{ events: TimeOffEvent[] }>('/api/time-off/events');
+}
+
+export function markTimeOffCompleted(eventId: string) {
+	return api<TimeOffEvent>(`/api/time-off/events/${encodeURIComponent(eventId)}`, {
+		method: 'PATCH',
+		body: JSON.stringify({ status: 'completed' }),
+	});
+}
+
+export function syncTimeOff() {
+	return api<TimeOffSyncResult>('/api/time-off/sync', { method: 'POST' });
 }
 
 export function listFilmSessions() {
