@@ -1,4 +1,5 @@
 import { redis } from '@/config/redis';
+import * as googleCalendarService from '@/services/googleCalendar.service';
 import * as spotifyService from '@/services/spotify.service';
 import * as ticktickService from '@/services/ticktick.service';
 
@@ -11,6 +12,7 @@ export type AdminStatus = {
 		configured: boolean;
 		connected: boolean;
 		monthKey: string;
+		playlistName: string;
 		playlistId: string | null;
 		playlistUrl: string | null;
 	};
@@ -19,6 +21,7 @@ export type AdminStatus = {
 		connected: boolean;
 		reminderEnabled: boolean;
 		projectIdConfigured: boolean;
+		timeOffProjectIdConfigured: boolean;
 	};
 	discord: {
 		configured: boolean;
@@ -31,17 +34,26 @@ export type AdminStatus = {
 		configured: boolean;
 		adminEmailConfigured: boolean;
 	};
+	calendar: {
+		oauthConfigured: boolean;
+		connected: boolean;
+		timeOffCalendarConfigured: boolean;
+	};
 };
 
 export async function getStatus(): Promise<AdminStatus> {
 	const monthKey = spotifyService.currentMonthKey();
-	const [spotifyRefresh, ticktickToken, reminderEnabled, playlistId] =
+	const [spotifyRefresh, ticktickToken, reminderEnabled, playlistId, calendarRefresh] =
 		await Promise.all([
 			spotifyService.getRefreshToken(),
 			ticktickService.getAccessToken(),
 			ticktickService.isReminderEnabled(),
 			redis.get<string>(`spotify:playlist:${monthKey}`),
+			googleCalendarService.getRefreshToken(),
 		]);
+
+	const timeOffProjectConfigured =
+		envConfigured('TICKTICK_TIME_OFF_PROJECT_ID') || envConfigured('TICKTICK_PROJECT_ID');
 
 	return {
 		spotify: {
@@ -51,6 +63,7 @@ export async function getStatus(): Promise<AdminStatus> {
 				envConfigured('SPOTIFY_REDIRECT_URI'),
 			connected: Boolean(spotifyRefresh),
 			monthKey,
+			playlistName: spotifyService.monthDisplayName(monthKey),
 			playlistId: playlistId ?? null,
 			playlistUrl: playlistId ? spotifyService.playlistUrl(playlistId) : null,
 		},
@@ -62,6 +75,7 @@ export async function getStatus(): Promise<AdminStatus> {
 			connected: Boolean(ticktickToken),
 			reminderEnabled,
 			projectIdConfigured: envConfigured('TICKTICK_PROJECT_ID'),
+			timeOffProjectIdConfigured: timeOffProjectConfigured,
 		},
 		discord: {
 			configured:
@@ -78,6 +92,14 @@ export async function getStatus(): Promise<AdminStatus> {
 				envConfigured('GOOGLE_REDIRECT_URI') &&
 				envConfigured('SESSION_SECRET'),
 			adminEmailConfigured: envConfigured('ADMIN_GOOGLE_EMAIL'),
+		},
+		calendar: {
+			oauthConfigured:
+				envConfigured('GOOGLE_CLIENT_ID') &&
+				envConfigured('GOOGLE_CLIENT_SECRET') &&
+				envConfigured('GOOGLE_CALENDAR_REDIRECT_URI'),
+			connected: Boolean(calendarRefresh),
+			timeOffCalendarConfigured: envConfigured('GOOGLE_TIME_OFF_CALENDAR_ID'),
 		},
 	};
 }

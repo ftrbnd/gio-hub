@@ -43,6 +43,24 @@ router.post(
 	requireAdminSession,
 	adminController.testDiscord,
 );
+router.get(
+	'/api/calendar/connect',
+	requireAdminSession,
+	adminController.connectCalendar,
+);
+router.get(
+	'/api/calendar/calendars',
+	requireAdminSession,
+	adminController.listCalendars,
+);
+router.get('/api/time-off/events', requireAdminSession, adminController.listTimeOffEvents);
+router.patch(
+	'/api/time-off/events/:eventId',
+	json(),
+	requireAdminSession,
+	adminController.markTimeOffCompleted,
+);
+router.post('/api/time-off/sync', requireAdminSession, adminController.syncTimeOff);
 
 router.get(
 	'/api/film/folders',

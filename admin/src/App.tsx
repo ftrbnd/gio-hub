@@ -2,6 +2,10 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Box, Center, Loader } from '@mantine/core';
 import { LoginPage } from './pages/LoginPage';
 import { HomePage } from './pages/HomePage';
+import { SpotifyPage } from './pages/SpotifyPage';
+import { TickTickPage } from './pages/TickTickPage';
+import { TimeOffPage } from './pages/TimeOffPage';
+import { DiscordPage } from './pages/DiscordPage';
 import { PhotosPage } from './pages/PhotosPage';
 import { AppShellLayout } from './components/AppShellLayout';
 import { useMe } from './hooks/useMe';
@@ -27,6 +31,10 @@ export function App() {
 			<Routes>
 				<Route element={<AppShellLayout email={me.email} />}>
 					<Route index element={<HomePage />} />
+					<Route path="spotify" element={<SpotifyPage />} />
+					<Route path="ticktick" element={<TickTickPage />} />
+					<Route path="time-off" element={<TimeOffPage />} />
+					<Route path="discord" element={<DiscordPage />} />
 					<Route path="photos" element={<PhotosPage />} />
 					<Route path="*" element={<Navigate to="/" replace />} />
 				</Route>

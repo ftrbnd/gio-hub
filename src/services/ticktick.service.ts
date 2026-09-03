@@ -4,6 +4,7 @@ import { requireEnv } from '@/lib/env';
 import { DiscordActionRow } from '@/models/discord.model';
 import {
 	TickTickProjectsResponseSchema,
+	TickTickTaskDetailSchema,
 	TickTickTaskResponseSchema,
 	TickTickTokenResponseSchema,
 } from '@/models/ticktick.model';
@@ -14,6 +15,7 @@ import {
 
 const TICKTICK_API_BASE = 'https://api.ticktick.com/open/v1';
 const SCOPES = 'tasks:write tasks:read';
+export const TASK_STATUS_COMPLETED = 2;
 
 const REMINDER_ENABLED_KEY = 'ticktick:reminder_enabled';
 export const REMINDER_TOGGLE_CUSTOM_ID = 'toggle_ticktick_reminder';
@@ -130,6 +132,10 @@ function formatTickTickDate(date: Date): string {
 	return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}+0000`;
 }
 
+function timeOffProjectId(): string {
+	return process.env.TICKTICK_TIME_OFF_PROJECT_ID?.trim() || requireEnv('TICKTICK_PROJECT_ID');
+}
+
 export async function createCheckPlaylistTask(playlistUrl: string): Promise<void> {
 	const dueDate = new Date(Date.now() + 5 * 60 * 1000);
 	const json = await ticktickFetch<unknown>('/task', {
@@ -145,4 +151,33 @@ export async function createCheckPlaylistTask(playlistUrl: string): Promise<void
 		}),
 	});
 	TickTickTaskResponseSchema.parse(json);
+}
+
+export async function createTimeOffReminderTask(input: {
+	title: string;
+	content: string;
+	dueDate: Date;
+}): Promise<{ taskId: string; projectId: string }> {
+	const projectId = timeOffProjectId();
+	const json = await ticktickFetch<unknown>('/task', {
+		method: 'POST',
+		body: JSON.stringify({
+			title: input.title,
+			content: input.content,
+			projectId,
+			dueDate: formatTickTickDate(input.dueDate),
+			timeZone: 'UTC',
+			isAllDay: true,
+			reminders: ['TRIGGER:PT0S'],
+		}),
+	});
+	const task = TickTickTaskResponseSchema.parse(json);
+	return { taskId: task.id, projectId: task.projectId || projectId };
+}
+
+export async function getTask(projectId: string, taskId: string) {
+	const json = await ticktickFetch<unknown>(
+		`/project/${encodeURIComponent(projectId)}/task/${encodeURIComponent(taskId)}`,
+	);
+	return TickTickTaskDetailSchema.parse(json);
 }

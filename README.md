@@ -19,14 +19,18 @@ tools that don't need a UI of their own:
    pings `POST /film/orient` with the folder name. Claude checks each
    landscape scan for sideways portrait frames and permanently rotates those
    assets in Cloudinary.
+6. **Calendar time off reminders** — scans your personal Google Calendar for
+   upcoming events and creates TickTick tasks reminding you to request time
+   off. Detects when you complete the TickTick task and tracks that in the
+   dashboard.
 
-All five modules share one Express app, one deploy, and one set of conventions:
+All six modules share one Express app, one deploy, and one set of conventions:
 routes → controllers → services → models, each request authenticated with a
 bearer secret.
 
 There is also a **web admin dashboard** at `/` (Google sign-in, restricted
-to your personal email) for connection status, manual sync, and film photo
-rotation — see [Admin dashboard](#admin-dashboard) below.
+to your personal email) for connection status, manual sync, time off tracking, and
+film photo rotation — see [Admin dashboard](#admin-dashboard) below.
 
 ## Deploy the server to Render
 
@@ -393,14 +397,81 @@ rotate from the [Admin dashboard](#admin-dashboard) Photos page.
 
 ---
 
+## Module 6: Calendar time off reminders
+
+Scans your personal Google Calendar for upcoming events and creates TickTick
+tasks like **"Request time off: Dentist — Mon Mar 9"** so you remember to
+submit time off at work. Events whose title starts with `Work —` (work shifts
+from Module 1) are skipped. When you complete the TickTick task, the daily
+sync (or a dashboard refresh) detects it and marks the event **Completed**.
+
+**Env vars:** `API_SECRET` (gates `/calendar/login` and `/calendar/calendars`),
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (same OAuth app as the admin
+dashboard), `GOOGLE_CALENDAR_REDIRECT_URI`, `GOOGLE_TIME_OFF_CALENDAR_ID`,
+`TICKTICK_TIME_OFF_PROJECT_ID` (optional — falls back to `TICKTICK_PROJECT_ID`),
+`TIME_OFF_REMINDER_LEAD_DAYS` (default `21`), `TIME_OFF_LOOKAHEAD_DAYS`
+(default `90`), plus TickTick credentials from Module 3.
+
+### One-time setup
+
+1. **Enable the Google Calendar API** in the same Google Cloud project as the
+   admin dashboard. Under **APIs & Services → Credentials**, add these
+   authorized redirect URIs to your OAuth client:
+   - `http://localhost:3000/calendar/callback` (local dev)
+   - `https://<your-render-url>/calendar/callback` (production)
+
+2. **Set the env vars above** — except `GOOGLE_TIME_OFF_CALENDAR_ID`, which you
+   don't have yet.
+
+3. **Connect Google Calendar** — with the server running, open:
+   ```
+   http://localhost:3000/calendar/login?secret=<your API_SECRET>
+   ```
+   (or use **Connect Google Calendar** on the admin dashboard). Approve the
+   consent screen. You should land on "Google Calendar connected — you can
+   close this tab."
+
+4. **Find your personal calendar id** — hit:
+   ```
+   http://localhost:3000/calendar/calendars?secret=<your API_SECRET>
+   ```
+   and copy the `id` of the personal calendar you want scanned (not your work
+   calendar). Set that as `GOOGLE_TIME_OFF_CALENDAR_ID`.
+
+5. **Optional:** set `TICKTICK_TIME_OFF_PROJECT_ID` to a dedicated TickTick list
+   for time off tasks (otherwise the playlist list from Module 3 is used).
+
+6. **Set up a daily QStash schedule** (same account as Redis). Under
+   **Schedules** → **Create Schedule**:
+   - Destination URL: `https://<your-render-url>/calendar/time-off-sync`
+   - Cron expression: e.g. `0 8 * * *` (every day at 08:00 UTC)
+   - Method: `POST`
+   - Headers: `Authorization` → `Bearer <your CRON_SECRET>`
+
+### Testing
+
+```bash
+curl -X POST http://localhost:3000/calendar/time-off-sync \
+  -H "Authorization: Bearer <your CRON_SECRET>"
+```
+
+Expect JSON like
+`{ "scanned": 3, "remindersCreated": 1, "completionsDetected": 0, "skipped": 2, "errors": [] }`.
+Running again immediately should report `remindersCreated: 0` for the same
+events. Complete the TickTick task, run sync again, and
+`completionsDetected` should increment. The admin dashboard **Time off
+reminders** section also checks TickTick when you load the page.
+
+---
+
 ## Admin dashboard
 
 A React + Mantine web UI (dark brown & beige with olive green, denim blue, and gray accents) served by this same Express app
 at the site root:
 
-- **Home** (`/`) — integration status, connect Spotify/TickTick, toggle
-  the TickTick reminder, run Spotify sync, Discord test DM, list TickTick
-  projects
+- **Home** (`/`) — integration status, connect Spotify/TickTick/Google Calendar,
+  toggle the TickTick reminder, run Spotify sync, time off sync + tracking, Discord
+  test DM, list TickTick projects and Google calendars
 - **Photos** (`/photos`) — pick a Cloudinary folder (latest upload selected by default), browse a paginated gallery (12 per page), and rotate frames in place
 
 The UI lives in [`admin/`](admin/) and builds into `public/` as part of

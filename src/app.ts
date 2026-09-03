@@ -18,8 +18,8 @@ export function createApp() {
 
 	app.use(express.static(path.join(process.cwd(), 'public')));
 
-	// React SPA client routes (home + photos).
-	app.get(['/', '/photos'], (_req, res) => {
+	// Unmatched GETs are client-side routes (e.g. /spotify, /time-off).
+	app.get('*', (_req, res) => {
 		res.sendFile(spaIndex);
 	});
 
