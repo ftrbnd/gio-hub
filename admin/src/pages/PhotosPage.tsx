@@ -26,12 +26,17 @@ import {
 	IconCheck,
 	IconExternalLink,
 } from '@tabler/icons-react';
+import { FavoriteButton } from '../components/FavoriteButton';
+import { PhotoDetailButton } from '../components/PhotoDetailButton';
+import { PhotoDetailModal } from '../components/PhotoDetailModal';
 import type { FilmPhotoItem } from '../lib/api';
 import { portfolioFilmUrl } from '../lib/portfolio';
 import {
 	useApplyPhotoRotations,
+	useFilmFavorites,
 	useFilmFolders,
 	useFilmPhotosPage,
+	useToggleFilmFavorite,
 } from '../hooks/useFilmQueries';
 import { colors, panelStyle, panelStyleAccent } from '../theme';
 
@@ -86,6 +91,7 @@ export function PhotosPage() {
 		Map<string, FilmPhotoItem>
 	>(() => new Map());
 	const [urlTokens, setUrlTokens] = useState<Record<string, number>>({});
+	const [detailPhoto, setDetailPhoto] = useState<FilmPhotoItem | null>(null);
 
 	const {
 		data: foldersData,
@@ -97,6 +103,8 @@ export function PhotosPage() {
 		isLoading: loadingPhotos,
 		isError: photosError,
 	} = useFilmPhotosPage(selectedFolder, page);
+	const { data: favoriteIds } = useFilmFavorites();
+	const toggleFavorite = useToggleFilmFavorite();
 	const applyRotations = useApplyPhotoRotations(selectedFolder, page);
 
 	const folders = foldersData?.folders ?? [];
@@ -377,6 +385,7 @@ export function PhotosPage() {
 	}
 
 	return (
+		<>
 		<Stack gap='xl'>
 			<div>
 				<Title
@@ -506,8 +515,13 @@ export function PhotosPage() {
 										photo={photo}
 										urlToken={urlTokens[photo.publicId] ?? 0}
 										selected={selectedPhotos.has(photo.publicId)}
+										favorite={favoriteIds?.has(photo.publicId) ?? false}
 										previewDegrees={pendingRotations.get(photo.publicId) ?? 0}
 										onToggleSelect={() => togglePhotoSelection(photo)}
+										onToggleFavorite={() =>
+											toggleFavorite.mutate(photo.publicId)
+										}
+										onOpenDetail={() => setDetailPhoto(photo)}
 										isApplying={bulkProcessingIds.has(photo.publicId)}
 										actionsDisabled={isBusy}
 										onPreviewRotate={(angle) => previewRotate(photo, angle)}
@@ -546,6 +560,24 @@ export function PhotosPage() {
 				</Stack>
 			)}
 		</Stack>
+
+		<PhotoDetailModal
+			opened={detailPhoto !== null}
+			photo={detailPhoto}
+			favorite={
+				detailPhoto ? (favoriteIds?.has(detailPhoto.publicId) ?? false) : false
+			}
+			previewDegrees={
+				detailPhoto ? (pendingRotations.get(detailPhoto.publicId) ?? 0) : 0
+			}
+			onClose={() => setDetailPhoto(null)}
+			onToggleFavorite={
+				detailPhoto
+					? () => toggleFavorite.mutate(detailPhoto.publicId)
+					: undefined
+			}
+		/>
+		</>
 	);
 }
 
@@ -781,8 +813,11 @@ function PhotoCard({
 	photo,
 	urlToken,
 	selected,
+	favorite,
 	previewDegrees,
 	onToggleSelect,
+	onToggleFavorite,
+	onOpenDetail,
 	isApplying,
 	actionsDisabled,
 	onPreviewRotate,
@@ -790,8 +825,11 @@ function PhotoCard({
 	photo: FilmPhotoItem;
 	urlToken: number;
 	selected: boolean;
+	favorite: boolean;
 	previewDegrees: number;
 	onToggleSelect: () => void;
+	onToggleFavorite: () => void;
+	onOpenDetail: () => void;
 	isApplying: boolean;
 	actionsDisabled: boolean;
 	onPreviewRotate: (angle: 90 | -90 | 180) => void;
@@ -846,6 +884,15 @@ function PhotoCard({
 							{previewDegrees}°
 						</Text>
 					)}
+					<PhotoDetailButton
+						disabled={isApplying}
+						onOpen={onOpenDetail}
+					/>
+					<FavoriteButton
+						favorite={favorite}
+						disabled={actionsDisabled || isApplying}
+						onToggle={onToggleFavorite}
+					/>
 				</Group>
 				<Paper
 					radius='sm'

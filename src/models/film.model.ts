@@ -69,6 +69,11 @@ export type FilmPhotoItem = {
 	assetFolder: string;
 };
 
+export const FilmFavoriteBodySchema = z.object({
+	publicId: z.string().trim().min(1),
+});
+export type FilmFavoriteBody = z.infer<typeof FilmFavoriteBodySchema>;
+
 export type OrientFolderResult = {
 	folder: string;
 	checked: number;

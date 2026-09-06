@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import {
+	FilmFavoriteBodySchema,
 	FilmReviewSession,
 	FilmRotatePhotoBodySchema,
 	OrientFolderBodySchema,
@@ -82,6 +83,31 @@ export async function rotatePhoto(req: Request, res: Response) {
 	} catch (err) {
 		console.error(`[${req.requestId}] failed to rotate photo:`, err);
 		res.status(502).json({ error: 'Failed to rotate photo' });
+	}
+}
+
+export async function listFavorites(req: Request, res: Response) {
+	try {
+		const publicIds = await filmService.listFavoritePublicIds();
+		res.json({ publicIds });
+	} catch (err) {
+		console.error(`[${req.requestId}] failed to list film favorites:`, err);
+		res.status(500).json({ error: 'Failed to list favorites' });
+	}
+}
+
+export async function toggleFavorite(req: Request, res: Response) {
+	const parsed = FilmFavoriteBodySchema.safeParse(req.body);
+	if (!parsed.success) {
+		return res.status(400).json({ error: 'Body must include a non-empty "publicId" string' });
+	}
+
+	try {
+		const result = await filmService.toggleFavorite(parsed.data.publicId);
+		res.json(result);
+	} catch (err) {
+		console.error(`[${req.requestId}] failed to toggle film favorite:`, err);
+		res.status(500).json({ error: 'Failed to update favorite' });
 	}
 }
 

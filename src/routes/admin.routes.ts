@@ -1,6 +1,7 @@
 import { Router, json } from 'express';
 import * as adminController from '@/controllers/admin.controller';
 import * as adminFilmController from '@/controllers/adminFilm.controller';
+import * as adminInstagramController from '@/controllers/adminInstagram.controller';
 import { requireAdminSession } from '@/middleware/adminAuth';
 
 const router = Router();
@@ -77,6 +78,34 @@ router.post(
 	json(),
 	requireAdminSession,
 	adminFilmController.rotatePhoto,
+);
+router.get(
+	'/api/film/favorites',
+	requireAdminSession,
+	adminFilmController.listFavorites,
+);
+router.post(
+	'/api/film/favorites/toggle',
+	json(),
+	requireAdminSession,
+	adminFilmController.toggleFavorite,
+);
+
+router.get(
+	'/api/instagram/draft',
+	requireAdminSession,
+	adminInstagramController.getDraft,
+);
+router.put(
+	'/api/instagram/draft',
+	json({ limit: '2mb' }),
+	requireAdminSession,
+	adminInstagramController.saveDraft,
+);
+router.delete(
+	'/api/instagram/draft',
+	requireAdminSession,
+	adminInstagramController.clearDraft,
 );
 
 router.get(

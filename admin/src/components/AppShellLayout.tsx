@@ -27,6 +27,11 @@ type NavItem = {
 
 const personalNav: NavItem[] = [
 	{ to: '/photos', label: 'Photos', icon: <IconPhoto size={18} /> },
+	{
+		to: '/instagram',
+		label: 'Instagram',
+		icon: <BrandIcon brand="instagram" size={18} />,
+	},
 	{ to: '/time-off', label: 'Time off', icon: <IconCalendarEvent size={18} /> },
 ];
 

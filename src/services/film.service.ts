@@ -35,6 +35,7 @@ Rules for angle (clockwise degrees applied to the current image):
 const REVIEW_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 const REVIEW_SESSION_KEY_PREFIX = 'film:review:';
 const REVIEW_SESSION_INDEX_KEY = 'film:review:sessions';
+const FAVORITES_KEY = 'film:favorites';
 
 export const FILM_CUSTOM_ID_PREFIX = 'film:';
 
@@ -44,6 +45,34 @@ function escapeSearchValue(value: string): string {
 
 function reviewSessionKey(sessionId: string): string {
 	return `${REVIEW_SESSION_KEY_PREFIX}${sessionId}`;
+}
+
+export async function listFavoritePublicIds(): Promise<string[]> {
+	const members = await redis.smembers(FAVORITES_KEY);
+	return members.sort();
+}
+
+export async function isFavorite(publicId: string): Promise<boolean> {
+	return Boolean(await redis.sismember(FAVORITES_KEY, publicId));
+}
+
+export async function setFavorite(
+	publicId: string,
+	favorite: boolean,
+): Promise<{ publicId: string; favorite: boolean }> {
+	if (favorite) {
+		await redis.sadd(FAVORITES_KEY, publicId);
+	} else {
+		await redis.srem(FAVORITES_KEY, publicId);
+	}
+	return { publicId, favorite };
+}
+
+export async function toggleFavorite(
+	publicId: string,
+): Promise<{ publicId: string; favorite: boolean }> {
+	const currentlyFavorite = await isFavorite(publicId);
+	return setFavorite(publicId, !currentlyFavorite);
 }
 
 async function trackReviewSession(sessionId: string): Promise<void> {

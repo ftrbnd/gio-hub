@@ -7,6 +7,7 @@ import { TickTickPage } from './pages/TickTickPage';
 import { TimeOffPage } from './pages/TimeOffPage';
 import { DiscordPage } from './pages/DiscordPage';
 import { PhotosPage } from './pages/PhotosPage';
+import { InstagramPage } from './pages/InstagramPage';
 import { AppShellLayout } from './components/AppShellLayout';
 import { useMe } from './hooks/useMe';
 import { colors } from './theme';
@@ -36,6 +37,7 @@ export function App() {
 					<Route path="time-off" element={<TimeOffPage />} />
 					<Route path="discord" element={<DiscordPage />} />
 					<Route path="photos" element={<PhotosPage />} />
+					<Route path="instagram" element={<InstagramPage />} />
 					<Route path="*" element={<Navigate to="/" replace />} />
 				</Route>
 			</Routes>

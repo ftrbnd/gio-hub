@@ -3,6 +3,7 @@ import {
 	siCloudinary,
 	siDiscord,
 	siGoogle,
+	siInstagram,
 	siSpotify,
 	siTicktick,
 } from 'simple-icons';
@@ -14,6 +15,7 @@ const brands = {
 	cloudinary: siCloudinary,
 	anthropic: siAnthropic,
 	google: siGoogle,
+	instagram: siInstagram,
 } as const;
 
 export type BrandName = keyof typeof brands;

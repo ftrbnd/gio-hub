@@ -155,6 +155,57 @@ export function rotatePhoto(publicId: string, assetFolder: string, angle: 90 | -
 	});
 }
 
+export function listFilmFavorites() {
+	return api<{ publicIds: string[] }>('/api/film/favorites');
+}
+
+export function toggleFilmFavorite(publicId: string) {
+	return api<{ publicId: string; favorite: boolean }>('/api/film/favorites/toggle', {
+		method: 'POST',
+		body: JSON.stringify({ publicId }),
+	});
+}
+
+export type InstagramComposerDraft = {
+	mode: 'stories' | 'post';
+	folder: string | null;
+	activeStoryIndex: number;
+	stories: Array<{
+		id: string;
+		layout: 2 | 3 | 4 | 6;
+		slots: Array<{
+			publicId: string;
+			secureUrl: string;
+			displayName: string;
+			assetFolder: string;
+		} | null>;
+	}>;
+	post: {
+		aspect: '4:5' | '1:1';
+		photos: Array<{
+			publicId: string;
+			secureUrl: string;
+			displayName: string;
+			assetFolder: string;
+		}>;
+	};
+};
+
+export function getInstagramDraft() {
+	return api<{ draft: InstagramComposerDraft | null }>('/api/instagram/draft');
+}
+
+export function saveInstagramDraft(draft: InstagramComposerDraft) {
+	return api<{ draft: InstagramComposerDraft }>('/api/instagram/draft', {
+		method: 'PUT',
+		body: JSON.stringify({ draft }),
+	});
+}
+
+export function clearInstagramDraft() {
+	return api<{ ok: boolean }>('/api/instagram/draft', { method: 'DELETE' });
+}
+
 export type FilmSessionSummary = {
 	sessionId: string;
 	folder: string;

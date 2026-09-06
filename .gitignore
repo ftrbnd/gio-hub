@@ -4,3 +4,5 @@ public/
 .env
 *.log
 .DS_Store
+package-lock.json
+admin/package-lock.json
