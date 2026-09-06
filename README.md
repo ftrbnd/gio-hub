@@ -59,15 +59,15 @@ request after a while takes ~30-60s to wake up, then responds normally.
 
 ```bash
 cp .env.example .env   # fill in the vars for whichever module(s) you're using
-npm install
-npm run dev             # watches src/ and restarts on change
+pnpm install
+pnpm dev             # server + client (API :3000, Vite :5173)
 ```
 
 Or, to run it the same way it runs in production (compiled, no watch):
 
 ```bash
-npm run build
-npm start
+pnpm build
+pnpm start
 ```
 
 ---
@@ -475,11 +475,12 @@ at the site root:
 - **Photos** (`/photos`) — pick a Cloudinary folder (latest upload selected by default), browse a paginated gallery (12 per page), and rotate frames in place
 
 The UI lives in [`admin/`](admin/) and builds into `public/` as part of
-`npm run build`. For local UI work with hot reload:
+`pnpm build`. For local UI work with hot reload:
 
 ```bash
-npm run dev          # API on :3000
-npm run dev:admin    # Vite on :5173 (proxies /api and /auth)
+pnpm dev          # both server and client (recommended)
+pnpm dev:server   # API on :3000
+pnpm dev:client   # Vite on :5173 (proxies /api and /auth)
 ```
 
 Open `http://localhost:5173/` while both are running, or build and use

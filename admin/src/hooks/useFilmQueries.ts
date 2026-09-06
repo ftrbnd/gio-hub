@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+	listFilmFavorites,
 	listFilmFolders,
 	listFolderPhotos,
 	rotatePhoto,
+	toggleFilmFavorite,
 	type FilmPhotoItem,
 	type FilmPhotosPage,
 } from '../lib/api';
@@ -63,6 +65,28 @@ export function useFilmPhotosPage(folder: string | null, page: number) {
 			cursorsRef.current = cursors;
 			return result;
 		},
+		enabled: !!folder,
+	});
+}
+
+async function fetchAllFolderPhotos(folder: string): Promise<FilmPhotoItem[]> {
+	const photos: FilmPhotoItem[] = [];
+	let cursor: string | undefined;
+
+	for (;;) {
+		const page = await listFolderPhotos(folder, cursor);
+		photos.push(...page.photos);
+		if (!page.nextCursor) break;
+		cursor = page.nextCursor;
+	}
+
+	return photos;
+}
+
+export function useFilmPhotosAll(folder: string | null) {
+	return useQuery({
+		queryKey: queryKeys.film.photosAll(folder ?? ''),
+		queryFn: () => fetchAllFolderPhotos(folder!),
 		enabled: !!folder,
 	});
 }
@@ -128,6 +152,50 @@ export function useApplyPhotoRotations(folder: string | null, page: number) {
 					};
 				},
 			);
+		},
+	});
+}
+
+export function useFilmFavorites() {
+	return useQuery({
+		queryKey: queryKeys.film.favorites(),
+		queryFn: async () => {
+			const result = await listFilmFavorites();
+			return new Set(result.publicIds);
+		},
+	});
+}
+
+export function useToggleFilmFavorite() {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: (publicId: string) => toggleFilmFavorite(publicId),
+		onMutate: async (publicId) => {
+			await queryClient.cancelQueries({ queryKey: queryKeys.film.favorites() });
+			const previous = queryClient.getQueryData<Set<string>>(
+				queryKeys.film.favorites(),
+			);
+			queryClient.setQueryData<Set<string>>(queryKeys.film.favorites(), (old) => {
+				const next = new Set(old ?? []);
+				if (next.has(publicId)) next.delete(publicId);
+				else next.add(publicId);
+				return next;
+			});
+			return { previous };
+		},
+		onError: (_err, _publicId, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(queryKeys.film.favorites(), context.previous);
+			}
+		},
+		onSuccess: (result) => {
+			queryClient.setQueryData<Set<string>>(queryKeys.film.favorites(), (old) => {
+				const next = new Set(old ?? []);
+				if (result.favorite) next.add(result.publicId);
+				else next.delete(result.publicId);
+				return next;
+			});
 		},
 	});
 }

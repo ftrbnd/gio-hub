@@ -3,12 +3,14 @@
 	"version": "1.0.0",
 	"description": "A personal-app server: parses work schedule photos (ADP screenshot or printed sheet) into calendar shifts using Claude's vision model, and keeps a monthly Spotify playlist stocked with your weekly top tracks.",
 	"main": "dist/index.js",
+	"packageManager": "pnpm@11.24.0",
 	"scripts": {
-		"build": "npm run build:admin && tsc && tsc-alias",
-		"build:admin": "npm --prefix admin ci && npm --prefix admin run build",
+		"build": "pnpm run build:client && tsc && tsc-alias",
+		"build:client": "pnpm --filter gio-hub-admin build",
 		"start": "node dist/index.js",
-		"dev": "tsx watch src/index.ts",
-		"dev:admin": "npm --prefix admin run dev"
+		"dev": "concurrently -k -n server,client -c blue,green \"pnpm run dev:server\" \"pnpm run dev:client\"",
+		"dev:server": "tsx watch src/index.ts",
+		"dev:client": "pnpm --filter gio-hub-admin dev"
 	},
 	"engines": {
 		"node": ">=18"
@@ -32,6 +34,7 @@
 		"@types/multer": "^2.2.0",
 		"@types/node": "^26.1.1",
 		"@types/sharp": "^0.31.1",
+		"concurrently": "^10.0.5",
 		"tsc-alias": "^1.9.1",
 		"tsx": "^4.23.12",
 		"typescript": "^7.0.2"
