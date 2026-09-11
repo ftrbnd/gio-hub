@@ -1,0 +1,26 @@
+@keyframes nutrition-cal-shimmer {
+	0% {
+		background-position: 120% center;
+	}
+	100% {
+		background-position: -120% center;
+	}
+}
+
+.nutritionCalShimmer {
+	display: inline-block;
+	background-image: linear-gradient(
+		90deg,
+		#788858 0%,
+		#788858 35%,
+		#f0e6d6 50%,
+		#788858 65%,
+		#788858 100%
+	);
+	background-size: 220% 100%;
+	background-clip: text;
+	-webkit-background-clip: text;
+	color: transparent;
+	-webkit-text-fill-color: transparent;
+	animation: nutrition-cal-shimmer 1.35s linear infinite;
+}

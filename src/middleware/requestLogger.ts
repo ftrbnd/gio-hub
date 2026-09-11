@@ -16,7 +16,10 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
 			`[${req.requestId}] -> ${res.statusCode} in ${Date.now() - start}ms`,
 		);
 	});
-	req.on('close', () => {
+	// Listen on the response, not the request: for small POST bodies, `req`
+	// can emit `close` as soon as the body is read — a false "client dropped"
+	// while the handler is still working.
+	res.on('close', () => {
 		if (!res.writableEnded) {
 			console.warn(
 				`[${req.requestId}] client closed the connection before a response was sent (${Date.now() - start}ms elapsed)`,

@@ -2,7 +2,9 @@ import { Router, json } from 'express';
 import * as adminController from '@/controllers/admin.controller';
 import * as adminFilmController from '@/controllers/adminFilm.controller';
 import * as adminInstagramController from '@/controllers/adminInstagram.controller';
+import * as adminNutritionController from '@/controllers/adminNutrition.controller';
 import { requireAdminSession } from '@/middleware/adminAuth';
+import { upload } from '@/config/upload';
 
 const router = Router();
 
@@ -135,6 +137,40 @@ router.post(
 	json(),
 	requireAdminSession,
 	adminFilmController.rotateSession,
+);
+
+router.get(
+	'/api/nutrition/entries',
+	requireAdminSession,
+	adminNutritionController.listEntries,
+);
+router.post(
+	'/api/nutrition/entries',
+	json(),
+	requireAdminSession,
+	adminNutritionController.createEntry,
+);
+router.patch(
+	'/api/nutrition/entries/:id',
+	json(),
+	requireAdminSession,
+	adminNutritionController.patchEntry,
+);
+router.post(
+	'/api/nutrition/entries/:id/calculate',
+	requireAdminSession,
+	adminNutritionController.calculateEntry,
+);
+router.post(
+	'/api/nutrition/entries/:id/photo',
+	requireAdminSession,
+	upload.array('photos', 10),
+	adminNutritionController.uploadPhoto,
+);
+router.delete(
+	'/api/nutrition/entries/:id',
+	requireAdminSession,
+	adminNutritionController.deleteEntry,
 );
 
 // Old /admin prefix → root (bookmarks / stale links).

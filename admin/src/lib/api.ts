@@ -305,3 +305,138 @@ export function rotateFilmSession(id: string, angle: 90 | -90 | 180) {
 		body: JSON.stringify({ angle }),
 	});
 }
+
+export type NutritionResult = {
+	title?: string;
+	calories: number | null;
+	totalFatG: number | null;
+	saturatedFatG: number | null;
+	polyunsaturatedFatG: number | null;
+	monounsaturatedFatG: number | null;
+	transFatG: number | null;
+	cholesterolMg: number | null;
+	sodiumMg: number | null;
+	potassiumMg: number | null;
+	totalCarbsG: number | null;
+	dietaryFiberG: number | null;
+	sugarsG: number | null;
+	addedSugarsG: number | null;
+	proteinG: number | null;
+	vitaminAPct: number | null;
+	vitaminCPct: number | null;
+	calciumPct: number | null;
+	ironPct: number | null;
+	vitaminDPct: number | null;
+	sourcesExplanation: string;
+};
+
+export type NutritionItem = {
+	id: string;
+	name: string;
+	status: 'idle' | 'calculating' | 'ready' | 'error';
+	errorMessage?: string | null;
+	result?: NutritionResult | null;
+};
+
+export type NutritionPhoto = {
+	url: string;
+	publicId: string;
+};
+
+export type NutritionEntry = {
+	id: string;
+	query: string;
+	restaurant?: string | null;
+	title?: string | null;
+	description?: string | null;
+	website?: string | null;
+	photos?: NutritionPhoto[];
+	photoUrl?: string | null;
+	photoPublicId?: string | null;
+	items?: NutritionItem[];
+	status: 'idle' | 'calculating' | 'ready' | 'error';
+	errorMessage?: string | null;
+	result?: NutritionResult | null;
+	createdAt: string;
+	updatedAt: string;
+};
+
+export function listNutritionEntries() {
+	return api<{ entries: NutritionEntry[] }>('/api/nutrition/entries');
+}
+
+export function createNutritionEntry(query?: string) {
+	return api<{ entry: NutritionEntry }>('/api/nutrition/entries', {
+		method: 'POST',
+		body: JSON.stringify({ query: query ?? '' }),
+	});
+}
+
+export function patchNutritionEntry(
+	id: string,
+	body: {
+		query?: string;
+		restaurant?: string | null;
+		description?: string | null;
+		website?: string | null;
+	},
+) {
+	return api<{ entry: NutritionEntry }>(
+		`/api/nutrition/entries/${encodeURIComponent(id)}`,
+		{
+			method: 'PATCH',
+			body: JSON.stringify(body),
+		},
+	);
+}
+
+export function calculateNutritionEntry(id: string) {
+	return api<{ entry: NutritionEntry }>(
+		`/api/nutrition/entries/${encodeURIComponent(id)}/calculate`,
+		{ method: 'POST' },
+	);
+}
+
+export async function uploadNutritionPhotos(id: string, files: File[]) {
+	const form = new FormData();
+	for (const file of files) {
+		form.append('photos', file);
+	}
+	const res = await fetch(
+		`/api/nutrition/entries/${encodeURIComponent(id)}/photo`,
+		{
+			method: 'POST',
+			credentials: 'same-origin',
+			body: form,
+		},
+	);
+	const text = await res.text();
+	let data: unknown = null;
+	if (text) {
+		try {
+			data = JSON.parse(text);
+		} catch {
+			data = { raw: text };
+		}
+	}
+	if (!res.ok) {
+		const message =
+			data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+				? data.error
+				: res.statusText || 'Request failed';
+		throw new ApiError(message, res.status, data);
+	}
+	return data as { entry: NutritionEntry };
+}
+
+/** @deprecated Prefer uploadNutritionPhotos */
+export async function uploadNutritionPhoto(id: string, file: File) {
+	return uploadNutritionPhotos(id, [file]);
+}
+
+export function deleteNutritionEntry(id: string) {
+	return api<{ ok: boolean }>(
+		`/api/nutrition/entries/${encodeURIComponent(id)}`,
+		{ method: 'DELETE' },
+	);
+}
