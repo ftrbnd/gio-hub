@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { anthropic } from '@/config/anthropic';
 import { ensureCloudinaryConfigured, cloudinary } from '@/config/cloudinary';
@@ -14,11 +14,74 @@ import {
 	NutritionResult,
 	NutritionResultSchema,
 } from '@/models/nutrition.model';
+import { z } from 'zod';
 
 const ENTRY_IDS_KEY = 'nutrition:entry_ids';
+const CALC_CACHE_PREFIX = 'nutrition:calc_v1:';
+/** 90 days */
+const CALC_CACHE_TTL_SECONDS = 60 * 60 * 24 * 90;
+
+const CachedCalcSchema = z.object({
+	restaurant: z.string().nullable(),
+	title: z.string().min(1),
+	items: z
+		.array(
+			z.object({
+				name: z.string().min(1),
+				result: NutritionResultSchema,
+			}),
+		)
+		.min(1),
+	cachedAt: z.string(),
+});
+type CachedCalc = z.infer<typeof CachedCalcSchema>;
 
 function entryKey(id: string): string {
 	return `nutrition:entry:${id}`;
+}
+
+/**
+ * Normalize free text for nutrition cache keys: case-insensitive, collapse
+ * whitespace, drop commas / parentheses / slashes (and similar punctuation noise).
+ */
+export function normalizeNutritionQueryKey(text: string): string {
+	return text
+		.toLowerCase()
+		.replace(/[,()/\\[\]{}.;:!?|'"`~@#$%^&*_+=<>]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+function buildCalcCacheMaterial(entry: NutritionEntry): string | null {
+	const query = normalizeNutritionQueryKey(entry.query);
+	if (!query) return null;
+	const restaurant = normalizeNutritionQueryKey(entry.restaurant ?? '');
+	const description = normalizeNutritionQueryKey(entry.description ?? '');
+	const website = normalizeNutritionQueryKey(entry.website ?? '');
+	const photos = (entry.photos ?? [])
+		.map((photo) => photo.publicId.trim())
+		.filter(Boolean)
+		.sort()
+		.join('|');
+	return [query, restaurant, description, website, photos].join('\n');
+}
+
+function calcCacheRedisKey(entry: NutritionEntry): string | null {
+	const material = buildCalcCacheMaterial(entry);
+	if (!material) return null;
+	const hash = createHash('sha256').update(material).digest('hex').slice(0, 40);
+	return `${CALC_CACHE_PREFIX}${hash}`;
+}
+
+async function readCalcCache(key: string): Promise<CachedCalc | null> {
+	const raw = await redis.get<unknown>(key);
+	if (!raw) return null;
+	const parsed = CachedCalcSchema.safeParse(raw);
+	return parsed.success ? parsed.data : null;
+}
+
+async function writeCalcCache(key: string, value: CachedCalc): Promise<void> {
+	await redis.set(key, value, { ex: CALC_CACHE_TTL_SECONDS });
 }
 
 function nowIso(): string {
@@ -48,9 +111,7 @@ function buildEntryTitle(options: {
 }): string {
 	if (options.itemNames.length <= 1) {
 		const single =
-			options.itemTitles?.[0]?.trim() ||
-			options.itemNames[0]?.trim() ||
-			'';
+			options.itemTitles?.[0]?.trim() || options.itemNames[0]?.trim() || '';
 		return single ? fallbackItemTitle(single) : 'Untitled';
 	}
 
@@ -233,6 +294,8 @@ export async function createEntry(query = ''): Promise<NutritionEntry> {
 		status: 'idle',
 		errorMessage: null,
 		result: null,
+		mfpLoggedAt: null,
+		mfpJobId: null,
 		createdAt: ts,
 		updatedAt: ts,
 	};
@@ -289,6 +352,20 @@ export async function updateEntry(
 		updatedAt: nowIso(),
 	};
 	return saveEntry(updated);
+}
+
+export async function markMfpLogged(
+	id: string,
+	jobId: string,
+): Promise<NutritionEntry | null> {
+	const existing = await readStoredEntry(id);
+	if (!existing) return null;
+	return saveEntry({
+		...existing,
+		mfpLoggedAt: nowIso(),
+		mfpJobId: jobId,
+		updatedAt: nowIso(),
+	});
 }
 
 export async function deleteEntry(id: string): Promise<boolean> {
@@ -441,10 +518,7 @@ async function parseMealItems(
 	return { restaurant, itemNames };
 }
 
-function buildItemPrompt(
-	entry: NutritionEntry,
-	itemName: string,
-): string {
+function buildItemPrompt(entry: NutritionEntry, itemName: string): string {
 	const restaurantLine = entry.restaurant?.trim()
 		? `Restaurant/place: ${entry.restaurant.trim()}`
 		: 'No restaurant provided.';
@@ -472,6 +546,11 @@ Steps:
 2. If a restaurant or brand is mentioned, search for its official site/menu and nutrition info for this item.
 3. Prefer published nutrition facts when available; otherwise estimate from similar items.
 4. Use query details/photo only when relevant to this item.
+5. Iced drinks (iced coffee, iced tea, iced latte, cold brew over ice, fountain sodas with ice, etc.):
+   - Prefer the brand's published nutrition for that iced size when available (those already assume ice).
+   - If estimating from a hot drink, full cup volume, or "X oz cup" without brand iced facts: do NOT treat the cup size as 100% liquid. Ice displaces roughly 25–40% of cup volume for a typical iced drink (more ice → less liquid). Scale calories/macros to the estimated liquid volume unless the query specifies extra ice, light ice, or no ice.
+   - "Light ice" ≈ more liquid (~10–15% displacement); "extra ice" ≈ less liquid (~40–50%); "no ice" ≈ full liquid volume.
+   - Mention ice displacement briefly in sourcesExplanation when it affected the estimate.
 
 Respond with ONLY a JSON object (no markdown fences) with these keys (use null when unknown):
 {
@@ -548,9 +627,7 @@ async function runItemCalculation(
 	};
 }
 
-function deriveEntryStatus(
-	items: NutritionItem[],
-): NutritionEntry['status'] {
+function deriveEntryStatus(items: NutritionItem[]): NutritionEntry['status'] {
 	if (items.length === 0) return 'idle';
 	if (items.some((item) => item.status === 'calculating')) return 'calculating';
 	if (items.every((item) => item.status === 'ready')) return 'ready';
@@ -571,6 +648,30 @@ export async function calculateEntry(
 			errorMessage: 'Enter food items first',
 			updatedAt: nowIso(),
 		});
+	}
+
+	const cacheKey = calcCacheRedisKey(existing);
+	if (cacheKey) {
+		const cached = await readCalcCache(cacheKey);
+		if (cached) {
+			const items: NutritionItem[] = cached.items.map((item) => ({
+				id: randomUUID(),
+				name: item.name,
+				status: 'ready',
+				errorMessage: null,
+				result: item.result,
+			}));
+			return saveEntry({
+				...existing,
+				restaurant: cached.restaurant,
+				title: cached.title,
+				items,
+				status: 'ready',
+				errorMessage: null,
+				result: null,
+				updatedAt: nowIso(),
+			});
+		}
 	}
 
 	await saveEntry({
@@ -667,7 +768,7 @@ export async function calculateEntry(
 						.join('; ') || 'Some items failed'
 				: null;
 
-		return saveEntry({
+		const saved = await saveEntry({
 			...after,
 			restaurant,
 			title,
@@ -677,6 +778,27 @@ export async function calculateEntry(
 			result: null,
 			updatedAt: nowIso(),
 		});
+
+		if (status === 'ready' && cacheKey) {
+			const cacheItems = settled
+				.filter((item) => item.status === 'ready' && item.result)
+				.map((item) => ({
+					name: item.name,
+					result: item.result!,
+				}));
+			if (cacheItems.length > 0) {
+				await writeCalcCache(cacheKey, {
+					restaurant,
+					title,
+					items: cacheItems,
+					cachedAt: nowIso(),
+				}).catch((err) => {
+					console.warn('nutrition calc cache write failed:', err);
+				});
+			}
+		}
+
+		return saved;
 	} catch (err) {
 		const after = (await readStoredEntry(id)) ?? existing;
 		const message =

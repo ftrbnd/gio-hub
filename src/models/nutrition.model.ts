@@ -73,6 +73,8 @@ export const NutritionEntrySchema = z.object({
 	errorMessage: z.string().nullable().optional(),
 	/** @deprecated Legacy single-item result; migrated into items on read. */
 	result: NutritionResultStoredSchema.nullable().optional(),
+	mfpLoggedAt: z.string().datetime().nullable().optional(),
+	mfpJobId: z.string().nullable().optional(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),
 });

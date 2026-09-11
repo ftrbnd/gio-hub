@@ -1,0 +1,25 @@
+{
+	"name": "gio-hub-mfp-worker",
+	"private": true,
+	"version": "1.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "tsx watch src/index.ts",
+		"start": "tsx src/index.ts",
+		"login": "tsx src/login.ts",
+		"chrome": "tsx src/openChrome.ts",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@anthropic-ai/sdk": "^0.115.0",
+		"dotenv": "^17.4.2",
+		"playwright": "1.63.0",
+		"sharp": "^0.35.3"
+	},
+	"devDependencies": {
+		"@types/node": "^26.1.1",
+		"@types/sharp": "^0.31.1",
+		"tsx": "^4.23.12",
+		"typescript": "^7.0.2"
+	}
+}

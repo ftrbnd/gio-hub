@@ -3,7 +3,9 @@ import * as adminController from '@/controllers/admin.controller';
 import * as adminFilmController from '@/controllers/adminFilm.controller';
 import * as adminInstagramController from '@/controllers/adminInstagram.controller';
 import * as adminNutritionController from '@/controllers/adminNutrition.controller';
+import * as adminMfpController from '@/controllers/adminMfp.controller';
 import { requireAdminSession } from '@/middleware/adminAuth';
+import { authenticate } from '@/middleware/auth';
 import { upload } from '@/config/upload';
 
 const router = Router();
@@ -171,6 +173,63 @@ router.delete(
 	'/api/nutrition/entries/:id',
 	requireAdminSession,
 	adminNutritionController.deleteEntry,
+);
+
+router.get(
+	'/api/mfp/session/status',
+	requireAdminSession,
+	adminMfpController.sessionStatus,
+);
+router.put(
+	'/api/mfp/credentials',
+	json(),
+	requireAdminSession,
+	adminMfpController.putCredentials,
+);
+router.delete(
+	'/api/mfp/session',
+	requireAdminSession,
+	adminMfpController.disconnectSession,
+);
+router.post(
+	'/api/mfp/browser/cancel',
+	requireAdminSession,
+	adminMfpController.cancelJob,
+);
+router.post(
+	'/api/nutrition/entries/:id/mfp-log',
+	requireAdminSession,
+	adminMfpController.startLog,
+);
+router.get(
+	'/api/mfp/jobs/:id',
+	requireAdminSession,
+	adminMfpController.getJob,
+);
+router.post(
+	'/api/mfp/jobs/:id/input',
+	json(),
+	requireAdminSession,
+	adminMfpController.jobInput,
+);
+
+// Local Mac worker (API_SECRET bearer) — headed Chromium + Claude browser use
+router.post(
+	'/api/mfp/worker/heartbeat',
+	json(),
+	authenticate,
+	adminMfpController.workerHeartbeat,
+);
+router.get(
+	'/api/mfp/worker/jobs/next',
+	authenticate,
+	adminMfpController.workerClaimNext,
+);
+router.patch(
+	'/api/mfp/worker/jobs/:id',
+	json(),
+	authenticate,
+	adminMfpController.workerPatchJob,
 );
 
 // Old /admin prefix → root (bookmarks / stale links).

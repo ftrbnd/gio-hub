@@ -357,8 +357,36 @@ export type NutritionEntry = {
 	status: 'idle' | 'calculating' | 'ready' | 'error';
 	errorMessage?: string | null;
 	result?: NutritionResult | null;
+	mfpLoggedAt?: string | null;
+	mfpJobId?: string | null;
 	createdAt: string;
 	updatedAt: string;
+};
+
+export type MfpJob = {
+	id: string;
+	entryId: string;
+	status: 'queued' | 'running' | 'needs_input' | 'done' | 'error';
+	logs: string[];
+	errorMessage?: string | null;
+	lastScreenshotBase64?: string | null;
+	createdAt: string;
+	updatedAt: string;
+};
+
+export const mfpJobQueryKey = (jobId: string) =>
+	['mfp', 'job', jobId] as const;
+
+export type MfpSessionStatus = {
+	connected: boolean;
+	emailMasked?: string | null;
+	workerOnline?: boolean;
+	workerHostname?: string | null;
+	workerLastSeenAt?: string | null;
+	browserBusy?: boolean;
+	activeJobId?: string | null;
+	activeEntryId?: string | null;
+	activeJobStatus?: MfpJob['status'] | null;
 };
 
 export function listNutritionEntries() {
@@ -438,5 +466,61 @@ export function deleteNutritionEntry(id: string) {
 	return api<{ ok: boolean }>(
 		`/api/nutrition/entries/${encodeURIComponent(id)}`,
 		{ method: 'DELETE' },
+	);
+}
+
+export function getMfpSessionStatus() {
+	return api<MfpSessionStatus>('/api/mfp/session/status');
+}
+
+export function saveMfpCredentials(email: string, password: string) {
+	return api<{ ok: boolean; connected: boolean; emailMasked?: string }>(
+		'/api/mfp/credentials',
+		{
+			method: 'PUT',
+			body: JSON.stringify({ email, password }),
+		},
+	);
+}
+
+export function disconnectMfpSession() {
+	return api<{ ok: boolean; connected: boolean }>('/api/mfp/session', {
+		method: 'DELETE',
+	});
+}
+
+export function cancelMfpBrowser() {
+	return api<{ ok: boolean; cancelledJobId: string | null }>(
+		'/api/mfp/browser/cancel',
+		{ method: 'POST' },
+	);
+}
+
+export function startMfpLog(entryId: string) {
+	return api<{ job: MfpJob }>(
+		`/api/nutrition/entries/${encodeURIComponent(entryId)}/mfp-log`,
+		{ method: 'POST' },
+	);
+}
+
+export function getMfpJob(jobId: string) {
+	return api<{ job: MfpJob }>(
+		`/api/mfp/jobs/${encodeURIComponent(jobId)}`,
+	);
+}
+
+export function sendMfpJobInput(
+	jobId: string,
+	body: {
+		text?: string;
+		resume?: boolean;
+	},
+) {
+	return api<{ job: MfpJob }>(
+		`/api/mfp/jobs/${encodeURIComponent(jobId)}/input`,
+		{
+			method: 'POST',
+			body: JSON.stringify(body),
+		},
 	);
 }

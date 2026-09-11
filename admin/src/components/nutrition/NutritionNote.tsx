@@ -6,6 +6,7 @@ import {
 	Collapse,
 	FileButton,
 	Group,
+	Menu,
 	Modal,
 	Paper,
 	Stack,
@@ -14,6 +15,7 @@ import {
 	UnstyledButton,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { useQuery } from '@tanstack/react-query';
 import {
 	IconArrowsMaximize,
 	IconChevronDown,
@@ -23,12 +25,25 @@ import {
 	IconTrash,
 	IconX,
 } from '@tabler/icons-react';
-import type { NutritionEntry } from '../../lib/api';
+import {
+	getMfpJob,
+	mfpJobQueryKey,
+	type NutritionEntry,
+} from '../../lib/api';
 import { colors, panelStyle } from '../../theme';
+import { MfpLogo } from './MfpLogo';
 import { NutritionDetails, NutritionMealDetails } from './NutritionDetails';
 import './nutritionCalShimmer.css';
 
 const MAX_NUTRITION_PHOTOS = 10;
+
+function formatMfpLoggedOn(iso: string): string {
+	return new Date(iso).toLocaleDateString(undefined, {
+		month: 'short',
+		day: 'numeric',
+		year: 'numeric',
+	});
+}
 
 /** Cloudinary on-the-fly resize for UI thumbs (pass through blob/local URLs). */
 function nutritionDisplayUrl(url: string, size: number): string {
@@ -48,18 +63,32 @@ type PendingPhoto = {
 
 type Props = {
 	entry: NutritionEntry;
+	mfpConnected: boolean;
+	mfpJobId?: string | null;
 	onPatch: (patch: { query?: string }) => Promise<void>;
 	onCalculate: () => Promise<void>;
 	onUploadPhotos: (files: File[]) => Promise<void>;
 	onDelete: () => Promise<void>;
+	onLogToMfp: () => Promise<void>;
+	onOpenMfpJob?: () => void;
+	onMfpJobDone?: (
+		outcome: 'done' | 'error',
+		jobId: string | null,
+		detail?: string,
+	) => void;
 };
 
 export function NutritionNote({
 	entry,
+	mfpConnected,
+	mfpJobId = null,
 	onPatch,
 	onCalculate,
 	onUploadPhotos,
 	onDelete,
+	onLogToMfp,
+	onOpenMfpJob,
+	onMfpJobDone,
 }: Props) {
 	const [query, setQuery] = useState(entry.query);
 	const [
@@ -77,10 +106,39 @@ export function NutritionNote({
 	const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
 	const [saving, setSaving] = useState(false);
 	const [deleting, setDeleting] = useState(false);
+	const [loggingMfp, setLoggingMfp] = useState(false);
 	const pendingPhotosRef = useRef(pendingPhotos);
 	pendingPhotosRef.current = pendingPhotos;
 	const queryInputRef = useRef<HTMLTextAreaElement>(null);
 	const wasFieldsOpenRef = useRef(fieldsOpen);
+
+	const mfpJobQuery = useQuery({
+		queryKey: mfpJobQueryKey(mfpJobId ?? ''),
+		queryFn: () => getMfpJob(mfpJobId!),
+		enabled: Boolean(mfpJobId),
+		refetchInterval: (query) => {
+			const status = query.state.data?.job.status;
+			return status === 'queued' ||
+				status === 'running' ||
+				status === 'needs_input'
+				? 1500
+				: false;
+		},
+	});
+	const mfpJob = mfpJobQuery.data?.job ?? null;
+	const mfpJobActive =
+		mfpJob?.status === 'queued' ||
+		mfpJob?.status === 'running' ||
+		mfpJob?.status === 'needs_input';
+	const mfpLoggedAt = entry.mfpLoggedAt ?? null;
+
+	useEffect(() => {
+		if (mfpJob?.status === 'done') {
+			onMfpJobDone?.('done', mfpJob.id);
+		} else if (mfpJob?.status === 'error') {
+			onMfpJobDone?.('error', mfpJob.id, mfpJob.errorMessage ?? undefined);
+		}
+	}, [mfpJob?.status, mfpJob?.id, mfpJob?.errorMessage, onMfpJobDone]);
 
 	const savedPhotos = entry.photos?.length
 		? entry.photos
@@ -230,6 +288,11 @@ export function NutritionNote({
 			.finally(() => setDeleting(false));
 	};
 
+	const handleLogToMfp = () => {
+		setLoggingMfp(true);
+		void onLogToMfp().finally(() => setLoggingMfp(false));
+	};
+
 	const addPhotosButton = (compact = false) =>
 		canAddPhotos ? (
 			<FileButton
@@ -376,6 +439,73 @@ export function NutritionNote({
 						'Save'
 					)}
 				</Button>
+				{hasReadyNutrition ? (
+					mfpJobActive ? (
+						<Button
+							variant="light"
+							color="mfp"
+							leftSection={<MfpLogo size={16} />}
+							onClick={onOpenMfpJob}
+						>
+							{mfpJob?.status === 'needs_input' ? 'Needs input' : 'Logging…'}
+						</Button>
+					) : mfpLoggedAt ? (
+						<Group gap={0} wrap="nowrap" style={{ flex: 1 }}>
+							<Button
+								variant="light"
+								color="mfp"
+								leftSection={<MfpLogo size={16} />}
+								justify="flex-start"
+								style={{
+									flex: 1,
+									pointerEvents: 'none',
+									borderTopRightRadius: 0,
+									borderBottomRightRadius: 0,
+								}}
+							>
+								Logged on {formatMfpLoggedOn(mfpLoggedAt)}
+							</Button>
+							<Menu position="bottom-end" withinPortal>
+								<Menu.Target>
+									<Button
+										variant="light"
+										color="mfp"
+										px="xs"
+										aria-label="MyFitnessPal options"
+										loading={loggingMfp}
+										disabled={!mfpConnected}
+										style={{
+											borderTopLeftRadius: 0,
+											borderBottomLeftRadius: 0,
+										}}
+									>
+										<IconChevronDown size={16} />
+									</Button>
+								</Menu.Target>
+								<Menu.Dropdown>
+									<Menu.Item
+										leftSection={<MfpLogo size={14} />}
+										onClick={handleLogToMfp}
+										disabled={!mfpConnected}
+									>
+										Log again
+									</Menu.Item>
+								</Menu.Dropdown>
+							</Menu>
+						</Group>
+					) : (
+						<Button
+							variant="light"
+							color="mfp"
+							leftSection={<MfpLogo size={16} />}
+							loading={loggingMfp}
+							disabled={!mfpConnected}
+							onClick={handleLogToMfp}
+						>
+							{mfpConnected ? 'Log' : 'Mac offline'}
+						</Button>
+					)
+				) : null}
 			</Group>
 		</Stack>
 	);
@@ -519,7 +649,107 @@ export function NutritionNote({
 								— cal
 							</Button>
 						)}
+						{mfpLoggedAt && !mfpJobActive ? (
+							<Button
+								size="compact-sm"
+								variant="light"
+								color="mfp"
+								leftSection={<MfpLogo size={14} />}
+								style={{ flexShrink: 0, pointerEvents: 'none' }}
+								title={`Logged on ${formatMfpLoggedOn(mfpLoggedAt)}`}
+							>
+								Logged
+							</Button>
+						) : null}
 					</Group>
+
+					{mfpJob &&
+					(mfpJob.status === 'queued' ||
+						mfpJob.status === 'running' ||
+						mfpJob.status === 'needs_input' ||
+						mfpJob.status === 'done' ||
+						mfpJob.status === 'error') ? (
+						<Stack
+							gap={4}
+							style={{
+								borderRadius: 8,
+								padding: '8px 10px',
+								background:
+									mfpJob.status === 'done'
+										? 'rgba(18, 184, 134, 0.12)'
+										: mfpJob.status === 'error'
+											? 'rgba(253, 126, 20, 0.12)'
+											: 'rgba(0, 102, 238, 0.1)',
+								border: `1px solid ${
+									mfpJob.status === 'done'
+										? 'rgba(18, 184, 134, 0.45)'
+										: mfpJob.status === 'error'
+											? 'rgba(253, 126, 20, 0.45)'
+											: 'rgba(0, 102, 238, 0.35)'
+								}`,
+							}}
+						>
+							<Group gap={8} wrap="nowrap">
+								<MfpLogo size={14} />
+								<Text
+									size="sm"
+									fw={600}
+									c={
+										mfpJob.status === 'done'
+											? 'teal'
+											: mfpJob.status === 'error'
+												? 'orange'
+												: 'mfp'
+									}
+									style={{ flex: 1 }}
+								>
+									{mfpJob.status === 'queued' ? (
+										<span className="nutritionCalShimmer">
+											Waiting for Mac worker…
+										</span>
+									) : mfpJob.status === 'running' ? (
+										<span className="nutritionCalShimmer">
+											Logging on your Mac…
+										</span>
+									) : mfpJob.status === 'needs_input' ? (
+										'Needs you on the Mac browser'
+									) : mfpJob.status === 'done' ? (
+										'Logged to MyFitnessPal'
+									) : (
+										'MyFitnessPal log failed'
+									)}
+								</Text>
+								{onOpenMfpJob && mfpJob.status !== 'done' ? (
+									<Button
+										size="compact-xs"
+										variant="subtle"
+										color="mfp"
+										onClick={onOpenMfpJob}
+									>
+										View
+									</Button>
+								) : null}
+							</Group>
+							{mfpJob.errorMessage ? (
+								<Text
+									size="xs"
+									c={mfpJob.status === 'error' ? 'orange' : 'dimmed'}
+								>
+									{mfpJob.errorMessage}
+								</Text>
+							) : null}
+							{mfpJob.logs.length > 0 && mfpJob.status !== 'done' ? (
+								<Text
+									size="xs"
+									c="dimmed"
+									lineClamp={2}
+									style={{ fontFamily: 'ui-monospace, monospace' }}
+								>
+									{mfpJob.logs[mfpJob.logs.length - 1]}
+								</Text>
+							) : null}
+						</Stack>
+					) : null}
 
 					{hasTitle ? (
 						<Collapse
