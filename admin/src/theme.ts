@@ -42,6 +42,20 @@ const denim: MantineColorsTuple = [
 	'#1a2835',
 ];
 
+/** MyFitnessPal brand blue. */
+const mfp: MantineColorsTuple = [
+	'#e8f0fe',
+	'#c9dbfc',
+	'#9bbcfa',
+	'#6c9cf7',
+	'#3e7cf4',
+	'#0066EE',
+	'#0058d0',
+	'#0049b0',
+	'#003a8f',
+	'#002b6e',
+];
+
 /** Mantine dark scale: light beige text (0) → deep brown surfaces (9). */
 const brown: MantineColorsTuple = [
 	'#F0E6D6',
@@ -72,6 +86,7 @@ export const colors = {
 	green: '#505040',
 	gray: '#888884',
 	gradientGlow: 'rgba(45, 62, 82, 0.35)',
+	mfp: '#0066EE',
 } as const;
 
 export const panelStyle = {
@@ -96,6 +111,7 @@ export const theme = createTheme({
 		forest,
 		stone,
 		denim,
+		mfp,
 		brown,
 		dark: brown,
 	},
