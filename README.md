@@ -23,8 +23,17 @@ tools that don't need a UI of their own:
    upcoming events and creates TickTick tasks reminding you to request time
    off. Detects when you complete the TickTick task and tracks that in the
    dashboard.
+7. **Nutrition notes** — Redis-backed meal inquiries calculated with Claude
+   (web search/fetch + optional photos). Optional **MyFitnessPal** logging
+   queues a job for a **local Mac worker** that runs headed Chromium with
+   Claude browser use (Create Food → diary). If the worker isn’t heartbeating,
+   Log shows that your Mac isn’t available. MFP email/password are stored
+   encrypted in Redis using `SESSION_SECRET` (password is never returned to
+   the client). This is best-effort personal automation and may break when
+   MFP’s UI changes; automating MFP may also conflict with their Terms of
+   Service.
 
-All six modules share one Express app, one deploy, and one set of conventions:
+All seven modules share one Express app, one deploy, and one set of conventions:
 routes → controllers → services → models, each request authenticated with a
 bearer secret.
 
@@ -44,7 +53,8 @@ GitHub.
    git push -u origin main
    ```
 2. Go to https://dashboard.render.com → **New** → **Blueprint**, and point it
-   at this repo. Render will read [`render.yaml`](render.yaml) and prompt you
+   at this repo. Render will read [`render.yaml`](render.yaml) (Docker runtime)
+   and prompt you
    for the environment variables below — enter them directly in Render's
    dashboard (not anywhere else). You only need the ones for the modules
    you're actually using; see each module's section below for what each
@@ -61,7 +71,11 @@ request after a while takes ~30-60s to wake up, then responds normally.
 cp .env.example .env   # fill in the vars for whichever module(s) you're using
 pnpm install
 pnpm dev             # server + client (API :3000, Vite :5173)
+pnpm dev:mfp         # server + client + MFP Mac worker
 ```
+
+For `dev:mfp`, set `GIO_HUB_URL=http://localhost:3000` in `.env` so the worker
+can reach the API.
 
 Or, to run it the same way it runs in production (compiled, no watch):
 
@@ -153,7 +167,7 @@ start of each month. If Discord (see Module 4 below) is connected, a summary
 of that week's top tracks is also DMed to you.
 
 **Env vars:** `API_SECRET` (same as above — also gates the one-time
-`/spotify/login` step), `CRON_SECRET` (a *separate* secret, generated the same
+`/spotify/login` step), `CRON_SECRET` (a _separate_ secret, generated the same
 way, used only by the weekly cron job — kept separate so a leak in a
 third-party cron dashboard can't be used against `/parse-schedule`),
 `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`,
@@ -175,7 +189,7 @@ third-party cron dashboard can't be used against `/parse-schedule`),
 2. **Create a free Upstash Redis database** at https://console.upstash.com →
    copy the REST API **URL** and **Token** into `UPSTASH_REDIS_REST_URL` /
    `UPSTASH_REDIS_REST_TOKEN`. This stores your Spotify refresh token and
-   monthly playlist state. Use the *same* database for both local dev and
+   monthly playlist state. Use the _same_ database for both local dev and
    production so you only have to connect Spotify once.
 
 3. **Set all the env vars** above (locally in `.env`, and/or in the Render
@@ -183,9 +197,11 @@ third-party cron dashboard can't be used against `/parse-schedule`),
 
 4. **Connect your Spotify account** — with the server running, open this URL
    in a browser and approve the consent screen:
+
    ```
    http://localhost:3000/spotify/login?secret=<your API_SECRET>
    ```
+
    (or the `https://<your-render-url>/...` equivalent in production). You
    should land on a page that says "Spotify connected — you can close this
    tab." This is a one-time step — the refresh token it stores in Upstash is
@@ -257,9 +273,11 @@ succeeds (the failure is just logged).
 
 3. **Connect your TickTick account** — with the server running, open this URL
    in a browser and approve the consent screen:
+
    ```
    http://localhost:3000/ticktick/login?secret=<your API_SECRET>
    ```
+
    (or the `https://<your-render-url>/...` equivalent in production). You
    should land on a page that says "TickTick connected — you can close this
    tab." This is a one-time step — the access token it stores in Upstash is
@@ -424,17 +442,21 @@ dashboard), `GOOGLE_CALENDAR_REDIRECT_URI`, `GOOGLE_TIME_OFF_CALENDAR_ID`,
    don't have yet.
 
 3. **Connect Google Calendar** — with the server running, open:
+
    ```
    http://localhost:3000/calendar/login?secret=<your API_SECRET>
    ```
+
    (or use **Connect Google Calendar** on the admin dashboard). Approve the
    consent screen. You should land on "Google Calendar connected — you can
    close this tab."
 
 4. **Find your personal calendar id** — hit:
+
    ```
    http://localhost:3000/calendar/calendars?secret=<your API_SECRET>
    ```
+
    and copy the `id` of the personal calendar you want scanned (not your work
    calendar). Set that as `GOOGLE_TIME_OFF_CALENDAR_ID`.
 
@@ -479,12 +501,29 @@ The UI lives in [`admin/`](admin/) and builds into `public/` as part of
 
 ```bash
 pnpm dev          # both server and client (recommended)
+pnpm dev:mfp      # server + client + MFP Mac worker
 pnpm dev:server   # API on :3000
 pnpm dev:client   # Vite on :5173 (proxies /api and /auth)
 ```
 
 Open `http://localhost:5173/` while both are running, or build and use
 `http://localhost:3000/` against the Express server alone
+
+### MyFitnessPal Mac worker
+
+MFP logging runs on your laptop, not on Render:
+
+```bash
+# once: install Chromium for the worker
+pnpm --filter gio-hub-mfp-worker exec playwright install chromium
+
+# set in .env (or export): GIO_HUB_URL, API_SECRET, ANTHROPIC_API_KEY
+pnpm mfp-worker   # worker only
+pnpm dev:mfp      # server + client + worker
+```
+
+While the worker is running it heartbeats to the server. If it isn’t, Nutrition
+shows **Mac worker offline** and Log returns 503.
 
 ### Auth
 

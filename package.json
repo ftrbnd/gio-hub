@@ -9,8 +9,12 @@
 		"build:client": "pnpm --filter gio-hub-admin build",
 		"start": "node dist/index.js",
 		"dev": "concurrently -k -n server,client -c blue,green \"pnpm run dev:server\" \"pnpm run dev:client\"",
+		"dev:mfp": "concurrently -k -n server,client,mfp -c blue,green,magenta \"pnpm run dev:server\" \"pnpm run dev:client\" \"pnpm run mfp-worker\"",
 		"dev:server": "tsx watch src/index.ts",
-		"dev:client": "pnpm --filter gio-hub-admin dev"
+		"dev:client": "pnpm --filter gio-hub-admin dev",
+		"mfp-worker": "pnpm --filter gio-hub-mfp-worker start",
+		"mfp-login": "pnpm --filter gio-hub-mfp-worker run login",
+		"mfp-chrome": "pnpm --filter gio-hub-mfp-worker run chrome"
 	},
 	"engines": {
 		"node": ">=18"

@@ -10,7 +10,7 @@ import {
 	Container,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCalendarEvent, IconHome, IconPhoto } from '@tabler/icons-react';
+import { IconApple, IconCalendarEvent, IconHome, IconPhoto } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
 import { logout } from '../lib/api';
 import { BrandIcon } from './BrandIcon';
@@ -32,6 +32,7 @@ const personalNav: NavItem[] = [
 		label: 'Instagram',
 		icon: <BrandIcon brand="instagram" size={18} />,
 	},
+	{ to: '/nutrition', label: 'Nutrition', icon: <IconApple size={18} /> },
 	{ to: '/time-off', label: 'Time off', icon: <IconCalendarEvent size={18} /> },
 ];
 
