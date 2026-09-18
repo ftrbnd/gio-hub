@@ -3,10 +3,13 @@ import { redis } from '@/config/redis';
 
 const OAUTH_STATE_TTL_SECONDS = 600;
 
-export async function createAndStoreOAuthState(namespace: string): Promise<string> {
+export async function createAndStoreOAuthState(
+	namespace: string,
+	ttlSeconds = OAUTH_STATE_TTL_SECONDS,
+): Promise<string> {
 	const state = crypto.randomUUID();
 	await redis.set(`${namespace}:oauth:state:${state}`, '1', {
-		ex: OAUTH_STATE_TTL_SECONDS,
+		ex: ttlSeconds,
 	});
 	return state;
 }

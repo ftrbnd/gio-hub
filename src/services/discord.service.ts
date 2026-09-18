@@ -82,3 +82,21 @@ export function notifyErrorDM(requestId: string | undefined, context: string, er
 		console.error(`[${requestId}] failed to send Discord error DM:`, notifyErr),
 	);
 }
+
+export async function notifyReauth(service: string, authorizeUrl: string): Promise<void> {
+	await sendEmbed({
+		title: 'Reauthentication needed',
+		description: `**${service}** token expired or was revoked.\n[Click here to reconnect](${authorizeUrl})`,
+		color: 0xfaa61a,
+	});
+}
+
+export function notifyReauthDM(
+	requestId: string | undefined,
+	service: string,
+	authorizeUrl: string,
+): void {
+	notifyReauth(service, authorizeUrl).catch((notifyErr) =>
+		console.error(`[${requestId}] failed to send Discord reauth DM:`, notifyErr),
+	);
+}

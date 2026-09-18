@@ -84,6 +84,7 @@ export async function timeOffSync(req: Request, res: Response) {
 		res.json(result);
 	} catch (err) {
 		if (err instanceof googleCalendarService.GoogleCalendarNotConnectedError) {
+			googleCalendarService.notifyReauthNeeded(req.requestId, 'Google Calendar (time off sync)');
 			return res.status(409).json({ error: err.message });
 		}
 		console.error(`[${req.requestId}] time off sync failed:`, err);

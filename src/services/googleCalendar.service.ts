@@ -7,6 +7,7 @@ import {
 	GoogleCalendarListEntry,
 	GoogleTokenResponseSchema,
 } from '@/models/googleCalendar.model';
+import * as discordService from '@/services/discord.service';
 import {
 	createAndStoreOAuthState as createOAuthState,
 	verifyAndConsumeOAuthState as verifyOAuthState,
@@ -16,6 +17,9 @@ const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
+const REFRESH_TOKEN_KEY = 'google_calendar:refresh_token';
+/** Longer TTL so a Discord reauth DM from the daily cron is still usable later. */
+const REAUTH_OAUTH_STATE_TTL_SECONDS = 60 * 60 * 24;
 
 export class GoogleCalendarNotConnectedError extends Error {
 	constructor() {
@@ -36,8 +40,28 @@ export function buildAuthorizeUrl(state: string): string {
 	return `${GOOGLE_AUTH_URL}?${params.toString()}`;
 }
 
-export function createAndStoreOAuthState(): Promise<string> {
-	return createOAuthState('google-calendar');
+export function createAndStoreOAuthState(ttlSeconds?: number): Promise<string> {
+	return createOAuthState('google-calendar', ttlSeconds);
+}
+
+/** One-click Google OAuth URL for Discord (state valid for 24h). */
+export async function createReauthAuthorizeUrl(): Promise<string> {
+	const state = await createAndStoreOAuthState(REAUTH_OAUTH_STATE_TTL_SECONDS);
+	return buildAuthorizeUrl(state);
+}
+
+/** Fire-and-forget Discord DM with a Google Calendar reconnect link. */
+export function notifyReauthNeeded(requestId: string | undefined, context: string): void {
+	createReauthAuthorizeUrl()
+		.then((url) => discordService.notifyReauthDM(requestId, context, url))
+		.catch((err) => {
+			console.error(`[${requestId}] failed to build Google Calendar reauth link:`, err);
+			discordService.notifyErrorDM(
+				requestId,
+				`${context} — reconnect needed but reauth link failed`,
+				err,
+			);
+		});
 }
 
 export function verifyAndConsumeOAuthState(state: string): Promise<boolean> {
@@ -83,21 +107,32 @@ export function refreshAccessToken(refreshToken: string) {
 }
 
 export async function storeRefreshToken(token: string): Promise<void> {
-	await redis.set('google_calendar:refresh_token', token);
+	await redis.set(REFRESH_TOKEN_KEY, token);
 }
 
 export async function getRefreshToken(): Promise<string | null> {
-	return (await redis.get<string>('google_calendar:refresh_token')) ?? null;
+	return (await redis.get<string>(REFRESH_TOKEN_KEY)) ?? null;
+}
+
+export async function clearRefreshToken(): Promise<void> {
+	await redis.del(REFRESH_TOKEN_KEY);
 }
 
 async function getAccessToken(): Promise<string> {
 	const storedRefreshToken = await getRefreshToken();
 	if (!storedRefreshToken) throw new GoogleCalendarNotConnectedError();
 
-	const { accessToken, refreshToken: rotatedRefreshToken } =
-		await refreshAccessToken(storedRefreshToken);
-	if (rotatedRefreshToken) await storeRefreshToken(rotatedRefreshToken);
-	return accessToken;
+	try {
+		const { accessToken, refreshToken: rotatedRefreshToken } =
+			await refreshAccessToken(storedRefreshToken);
+		if (rotatedRefreshToken) await storeRefreshToken(rotatedRefreshToken);
+		return accessToken;
+	} catch {
+		// Expired / revoked refresh tokens surface as generic token request
+		// failures — treat them as disconnected so callers can offer reauth.
+		await clearRefreshToken();
+		throw new GoogleCalendarNotConnectedError();
+	}
 }
 
 async function calendarFetch<T>(path: string, init?: RequestInit): Promise<T> {
